@@ -1,0 +1,791 @@
+百度：{"corpus_no":"6939802209725649116","err_msg":"success.","err_no":0,"result":["孩子上了四年级后，英语就变成了每次考试的必考科目之一，当家长们还在为数学，语文，给孩子报补习班的时候，英语往往往成了被忽视的那一个学科，因为在家长的理念里，英语就是要背单词，而且要大量的背，但是家长们，我们其实学习英语也是有方法的，学习英语也是有77的吗？4到6年级是孩子学习英语的琴，也是黄积极，一旦错过，未来给孩子投入再多的时间很紧紧紧紧紧紧紧紧紧用的还是跟随随时天天因为他妈妈陈军老师主讲，总结十多种数据单词的方法，让孩子爱上学习，老马进去还有更多的信息资料可以领取。"],"sn":"60068182841615798615"}
+
+腾讯：{
+  "Response": {
+    "RequestId": "8f344075-42ae-4adc-b56c-d937b39b3565",
+    "Data": {
+      "TaskId": 1163279619,
+      "Status": 2,
+      "StatusStr": "success",
+      "Result": "[0:0.030,0:23.610,0]  孩子上了四年级后，英语就变成了每次考试的必考科目之一，当家长们还在为数学、语文给孩子报补习班的时候，英语往往成了被忽视的那一个学科，因为在家长的理念里，英语就是要背单词，而且要大量的背，但是家长们有没有想过吗？其实学习英语也是有方法的，学习英语也是有启蒙期的吗？\n[0:24.180,0:45.390,0]  四到六年级是孩子学习英语的启蒙期，也是黄金期，一旦错过，未来给孩子投入再多的时间和金钱都是有用的，来世是跟谁学四天英语特训班吧，陈军老师主讲总结十多种速记单词的方法，让孩子爱上学英语，扫码进群，还有更多的学习资料可以领取。\n",
+      "ResultDetail": [
+        {
+          "FinalSentence": "孩子上了四年级后，英语就变成了每次考试的必考科目之一，当家长们还在为数学、语文给孩子报补习班的时候，英语往往成了被忽视的那一个学科，因为在家长的理念里，英语就是要背单词，而且要大量的背，但是家长们有没有想过吗？其实学习英语也是有方法的，学习英语也是有启蒙期的吗？",
+          "SliceSentence": "孩子 上 了 四年级 后 ， 英语 就 变成了 每次 考试 的 必考 科目 之一 ， 当 家长 们 还在 为 数学 、 语文 给孩子 报 补习班 的 时候 ， 英语 往往 成 了 被忽视 的 那 一 个 学科 ， 因为 在 家长 的 理念 里 ， 英语 就是 要 背单词 ， 而且 要 大量 的 背 ， 但是 家长 们 有没有 想过 吗 ？ 其实 学习 英语 也是 有 方法 的 ， 学习 英语 也是 有 启蒙 期 的 吗 ？",
+          "StartMs": 30,
+          "EndMs": 23610,
+          "SpeechSpeed": 5.1,
+          "WordsNum": 83,
+          "Words": [
+            {
+              "OffsetStartMs": 0,
+              "OffsetEndMs": 360,
+              "Word": "孩子"
+            },
+            {
+              "OffsetStartMs": 360,
+              "OffsetEndMs": 570,
+              "Word": "上"
+            },
+            {
+              "OffsetStartMs": 570,
+              "OffsetEndMs": 720,
+              "Word": "了"
+            },
+            {
+              "OffsetStartMs": 720,
+              "OffsetEndMs": 1350,
+              "Word": "四年级"
+            },
+            {
+              "OffsetStartMs": 1350,
+              "OffsetEndMs": 1710,
+              "Word": "后"
+            },
+            {
+              "OffsetStartMs": 1350,
+              "OffsetEndMs": 1710,
+              "Word": "，"
+            },
+            {
+              "OffsetStartMs": 1740,
+              "OffsetEndMs": 2280,
+              "Word": "英语"
+            },
+            {
+              "OffsetStartMs": 2280,
+              "OffsetEndMs": 2430,
+              "Word": "就"
+            },
+            {
+              "OffsetStartMs": 2430,
+              "OffsetEndMs": 2940,
+              "Word": "变成了"
+            },
+            {
+              "OffsetStartMs": 2940,
+              "OffsetEndMs": 3360,
+              "Word": "每次"
+            },
+            {
+              "OffsetStartMs": 3360,
+              "OffsetEndMs": 3720,
+              "Word": "考试"
+            },
+            {
+              "OffsetStartMs": 3720,
+              "OffsetEndMs": 3930,
+              "Word": "的"
+            },
+            {
+              "OffsetStartMs": 3960,
+              "OffsetEndMs": 4380,
+              "Word": "必考"
+            },
+            {
+              "OffsetStartMs": 4380,
+              "OffsetEndMs": 4680,
+              "Word": "科目"
+            },
+            {
+              "OffsetStartMs": 4680,
+              "OffsetEndMs": 5100,
+              "Word": "之一"
+            },
+            {
+              "OffsetStartMs": 4680,
+              "OffsetEndMs": 5100,
+              "Word": "，"
+            },
+            {
+              "OffsetStartMs": 5160,
+              "OffsetEndMs": 5400,
+              "Word": "当"
+            },
+            {
+              "OffsetStartMs": 5400,
+              "OffsetEndMs": 5730,
+              "Word": "家长"
+            },
+            {
+              "OffsetStartMs": 5730,
+              "OffsetEndMs": 5850,
+              "Word": "们"
+            },
+            {
+              "OffsetStartMs": 5850,
+              "OffsetEndMs": 6210,
+              "Word": "还在"
+            },
+            {
+              "OffsetStartMs": 6210,
+              "OffsetEndMs": 6450,
+              "Word": "为"
+            },
+            {
+              "OffsetStartMs": 6450,
+              "OffsetEndMs": 6930,
+              "Word": "数学"
+            },
+            {
+              "OffsetStartMs": 6450,
+              "OffsetEndMs": 6930,
+              "Word": "、"
+            },
+            {
+              "OffsetStartMs": 6930,
+              "OffsetEndMs": 7350,
+              "Word": "语文"
+            },
+            {
+              "OffsetStartMs": 7350,
+              "OffsetEndMs": 7800,
+              "Word": "给孩子"
+            },
+            {
+              "OffsetStartMs": 7800,
+              "OffsetEndMs": 7950,
+              "Word": "报"
+            },
+            {
+              "OffsetStartMs": 7950,
+              "OffsetEndMs": 8400,
+              "Word": "补习班"
+            },
+            {
+              "OffsetStartMs": 8400,
+              "OffsetEndMs": 8490,
+              "Word": "的"
+            },
+            {
+              "OffsetStartMs": 8490,
+              "OffsetEndMs": 8940,
+              "Word": "时候"
+            },
+            {
+              "OffsetStartMs": 8490,
+              "OffsetEndMs": 8940,
+              "Word": "，"
+            },
+            {
+              "OffsetStartMs": 9060,
+              "OffsetEndMs": 9630,
+              "Word": "英语"
+            },
+            {
+              "OffsetStartMs": 9630,
+              "OffsetEndMs": 10050,
+              "Word": "往往"
+            },
+            {
+              "OffsetStartMs": 10050,
+              "OffsetEndMs": 10260,
+              "Word": "成"
+            },
+            {
+              "OffsetStartMs": 10260,
+              "OffsetEndMs": 10410,
+              "Word": "了"
+            },
+            {
+              "OffsetStartMs": 10410,
+              "OffsetEndMs": 11160,
+              "Word": "被忽视"
+            },
+            {
+              "OffsetStartMs": 11160,
+              "OffsetEndMs": 11310,
+              "Word": "的"
+            },
+            {
+              "OffsetStartMs": 11310,
+              "OffsetEndMs": 11400,
+              "Word": "那"
+            },
+            {
+              "OffsetStartMs": 11400,
+              "OffsetEndMs": 11580,
+              "Word": "一"
+            },
+            {
+              "OffsetStartMs": 11580,
+              "OffsetEndMs": 11670,
+              "Word": "个"
+            },
+            {
+              "OffsetStartMs": 11670,
+              "OffsetEndMs": 12210,
+              "Word": "学科"
+            },
+            {
+              "OffsetStartMs": 11670,
+              "OffsetEndMs": 12210,
+              "Word": "，"
+            },
+            {
+              "OffsetStartMs": 12240,
+              "OffsetEndMs": 12690,
+              "Word": "因为"
+            },
+            {
+              "OffsetStartMs": 12690,
+              "OffsetEndMs": 12960,
+              "Word": "在"
+            },
+            {
+              "OffsetStartMs": 12960,
+              "OffsetEndMs": 13320,
+              "Word": "家长"
+            },
+            {
+              "OffsetStartMs": 13320,
+              "OffsetEndMs": 13380,
+              "Word": "的"
+            },
+            {
+              "OffsetStartMs": 13380,
+              "OffsetEndMs": 13830,
+              "Word": "理念"
+            },
+            {
+              "OffsetStartMs": 13830,
+              "OffsetEndMs": 14040,
+              "Word": "里"
+            },
+            {
+              "OffsetStartMs": 13830,
+              "OffsetEndMs": 14040,
+              "Word": "，"
+            },
+            {
+              "OffsetStartMs": 14070,
+              "OffsetEndMs": 14430,
+              "Word": "英语"
+            },
+            {
+              "OffsetStartMs": 14430,
+              "OffsetEndMs": 14640,
+              "Word": "就是"
+            },
+            {
+              "OffsetStartMs": 14640,
+              "OffsetEndMs": 14790,
+              "Word": "要"
+            },
+            {
+              "OffsetStartMs": 14790,
+              "OffsetEndMs": 15450,
+              "Word": "背单词"
+            },
+            {
+              "OffsetStartMs": 14790,
+              "OffsetEndMs": 15450,
+              "Word": "，"
+            },
+            {
+              "OffsetStartMs": 15570,
+              "OffsetEndMs": 15840,
+              "Word": "而且"
+            },
+            {
+              "OffsetStartMs": 15840,
+              "OffsetEndMs": 15990,
+              "Word": "要"
+            },
+            {
+              "OffsetStartMs": 15990,
+              "OffsetEndMs": 16380,
+              "Word": "大量"
+            },
+            {
+              "OffsetStartMs": 16380,
+              "OffsetEndMs": 16470,
+              "Word": "的"
+            },
+            {
+              "OffsetStartMs": 16470,
+              "OffsetEndMs": 16650,
+              "Word": "背"
+            },
+            {
+              "OffsetStartMs": 16470,
+              "OffsetEndMs": 16650,
+              "Word": "，"
+            },
+            {
+              "OffsetStartMs": 16650,
+              "OffsetEndMs": 16890,
+              "Word": "但是"
+            },
+            {
+              "OffsetStartMs": 16890,
+              "OffsetEndMs": 17250,
+              "Word": "家长"
+            },
+            {
+              "OffsetStartMs": 17250,
+              "OffsetEndMs": 17460,
+              "Word": "们"
+            },
+            {
+              "OffsetStartMs": 17520,
+              "OffsetEndMs": 17850,
+              "Word": "有没有"
+            },
+            {
+              "OffsetStartMs": 17850,
+              "OffsetEndMs": 18210,
+              "Word": "想过"
+            },
+            {
+              "OffsetStartMs": 18210,
+              "OffsetEndMs": 18450,
+              "Word": "吗"
+            },
+            {
+              "OffsetStartMs": 18210,
+              "OffsetEndMs": 18450,
+              "Word": "？"
+            },
+            {
+              "OffsetStartMs": 18780,
+              "OffsetEndMs": 19170,
+              "Word": "其实"
+            },
+            {
+              "OffsetStartMs": 19170,
+              "OffsetEndMs": 19560,
+              "Word": "学习"
+            },
+            {
+              "OffsetStartMs": 19560,
+              "OffsetEndMs": 19920,
+              "Word": "英语"
+            },
+            {
+              "OffsetStartMs": 19920,
+              "OffsetEndMs": 20250,
+              "Word": "也是"
+            },
+            {
+              "OffsetStartMs": 20250,
+              "OffsetEndMs": 20430,
+              "Word": "有"
+            },
+            {
+              "OffsetStartMs": 20430,
+              "OffsetEndMs": 20850,
+              "Word": "方法"
+            },
+            {
+              "OffsetStartMs": 20850,
+              "OffsetEndMs": 21060,
+              "Word": "的"
+            },
+            {
+              "OffsetStartMs": 20850,
+              "OffsetEndMs": 21060,
+              "Word": "，"
+            },
+            {
+              "OffsetStartMs": 21330,
+              "OffsetEndMs": 21690,
+              "Word": "学习"
+            },
+            {
+              "OffsetStartMs": 21690,
+              "OffsetEndMs": 22020,
+              "Word": "英语"
+            },
+            {
+              "OffsetStartMs": 22020,
+              "OffsetEndMs": 22410,
+              "Word": "也是"
+            },
+            {
+              "OffsetStartMs": 22410,
+              "OffsetEndMs": 22560,
+              "Word": "有"
+            },
+            {
+              "OffsetStartMs": 22560,
+              "OffsetEndMs": 22980,
+              "Word": "启蒙"
+            },
+            {
+              "OffsetStartMs": 22980,
+              "OffsetEndMs": 23160,
+              "Word": "期"
+            },
+            {
+              "OffsetStartMs": 23160,
+              "OffsetEndMs": 23280,
+              "Word": "的"
+            },
+            {
+              "OffsetStartMs": 23280,
+              "OffsetEndMs": 23580,
+              "Word": "吗"
+            },
+            {
+              "OffsetStartMs": 23280,
+              "OffsetEndMs": 23580,
+              "Word": "？"
+            }
+          ]
+        },
+        {
+          "FinalSentence": "四到六年级是孩子学习英语的启蒙期，也是黄金期，一旦错过，未来给孩子投入再多的时间和金钱都是有用的，来世是跟谁学四天英语特训班吧，陈军老师主讲总结十多种速记单词的方法，让孩子爱上学英语，扫码进群，还有更多的学习资料可以领取。",
+          "SliceSentence": "四 到 六年级 是 孩子 学习 英语 的 启蒙 期 ， 也是 黄金期 ， 一旦 错过 ， 未来 给孩子 投入 再多 的 时间 和 金钱 都是 有用 的 ， 来世 是 跟 谁 学 四天 英语 特训 班 吧 ， 陈 军 老师 主讲 总结 十多 种 速记 单词 的 方法 ， 让孩子 爱上 学 英语 ， 扫码 进群 ， 还有 更 多的 学习 资料 可以 领取 。",
+          "StartMs": 24180,
+          "EndMs": 45390,
+          "SpeechSpeed": 4.8,
+          "WordsNum": 68,
+          "Words": [
+            {
+              "OffsetStartMs": 0,
+              "OffsetEndMs": 150,
+              "Word": "四"
+            },
+            {
+              "OffsetStartMs": 150,
+              "OffsetEndMs": 420,
+              "Word": "到"
+            },
+            {
+              "OffsetStartMs": 420,
+              "OffsetEndMs": 1170,
+              "Word": "六年级"
+            },
+            {
+              "OffsetStartMs": 1170,
+              "OffsetEndMs": 1380,
+              "Word": "是"
+            },
+            {
+              "OffsetStartMs": 1380,
+              "OffsetEndMs": 1830,
+              "Word": "孩子"
+            },
+            {
+              "OffsetStartMs": 1830,
+              "OffsetEndMs": 2160,
+              "Word": "学习"
+            },
+            {
+              "OffsetStartMs": 2160,
+              "OffsetEndMs": 2430,
+              "Word": "英语"
+            },
+            {
+              "OffsetStartMs": 2430,
+              "OffsetEndMs": 2550,
+              "Word": "的"
+            },
+            {
+              "OffsetStartMs": 2550,
+              "OffsetEndMs": 3030,
+              "Word": "启蒙"
+            },
+            {
+              "OffsetStartMs": 3030,
+              "OffsetEndMs": 3300,
+              "Word": "期"
+            },
+            {
+              "OffsetStartMs": 3030,
+              "OffsetEndMs": 3300,
+              "Word": "，"
+            },
+            {
+              "OffsetStartMs": 3330,
+              "OffsetEndMs": 3690,
+              "Word": "也是"
+            },
+            {
+              "OffsetStartMs": 3690,
+              "OffsetEndMs": 4740,
+              "Word": "黄金期"
+            },
+            {
+              "OffsetStartMs": 3690,
+              "OffsetEndMs": 4740,
+              "Word": "，"
+            },
+            {
+              "OffsetStartMs": 4890,
+              "OffsetEndMs": 5280,
+              "Word": "一旦"
+            },
+            {
+              "OffsetStartMs": 5280,
+              "OffsetEndMs": 5730,
+              "Word": "错过"
+            },
+            {
+              "OffsetStartMs": 5280,
+              "OffsetEndMs": 5730,
+              "Word": "，"
+            },
+            {
+              "OffsetStartMs": 5730,
+              "OffsetEndMs": 6090,
+              "Word": "未来"
+            },
+            {
+              "OffsetStartMs": 6090,
+              "OffsetEndMs": 6540,
+              "Word": "给孩子"
+            },
+            {
+              "OffsetStartMs": 6540,
+              "OffsetEndMs": 6930,
+              "Word": "投入"
+            },
+            {
+              "OffsetStartMs": 6930,
+              "OffsetEndMs": 7410,
+              "Word": "再多"
+            },
+            {
+              "OffsetStartMs": 7410,
+              "OffsetEndMs": 7560,
+              "Word": "的"
+            },
+            {
+              "OffsetStartMs": 7560,
+              "OffsetEndMs": 7950,
+              "Word": "时间"
+            },
+            {
+              "OffsetStartMs": 7950,
+              "OffsetEndMs": 8100,
+              "Word": "和"
+            },
+            {
+              "OffsetStartMs": 8100,
+              "OffsetEndMs": 8520,
+              "Word": "金钱"
+            },
+            {
+              "OffsetStartMs": 8550,
+              "OffsetEndMs": 8880,
+              "Word": "都是"
+            },
+            {
+              "OffsetStartMs": 8880,
+              "OffsetEndMs": 9300,
+              "Word": "有用"
+            },
+            {
+              "OffsetStartMs": 9300,
+              "OffsetEndMs": 9450,
+              "Word": "的"
+            },
+            {
+              "OffsetStartMs": 9300,
+              "OffsetEndMs": 9450,
+              "Word": "，"
+            },
+            {
+              "OffsetStartMs": 9510,
+              "OffsetEndMs": 9870,
+              "Word": "来世"
+            },
+            {
+              "OffsetStartMs": 9870,
+              "OffsetEndMs": 10080,
+              "Word": "是"
+            },
+            {
+              "OffsetStartMs": 10080,
+              "OffsetEndMs": 10320,
+              "Word": "跟"
+            },
+            {
+              "OffsetStartMs": 10320,
+              "OffsetEndMs": 10530,
+              "Word": "谁"
+            },
+            {
+              "OffsetStartMs": 10530,
+              "OffsetEndMs": 10860,
+              "Word": "学"
+            },
+            {
+              "OffsetStartMs": 10860,
+              "OffsetEndMs": 11430,
+              "Word": "四天"
+            },
+            {
+              "OffsetStartMs": 11430,
+              "OffsetEndMs": 11760,
+              "Word": "英语"
+            },
+            {
+              "OffsetStartMs": 11760,
+              "OffsetEndMs": 12060,
+              "Word": "特训"
+            },
+            {
+              "OffsetStartMs": 12060,
+              "OffsetEndMs": 12240,
+              "Word": "班"
+            },
+            {
+              "OffsetStartMs": 12240,
+              "OffsetEndMs": 12510,
+              "Word": "吧"
+            },
+            {
+              "OffsetStartMs": 12240,
+              "OffsetEndMs": 12510,
+              "Word": "，"
+            },
+            {
+              "OffsetStartMs": 12660,
+              "OffsetEndMs": 12900,
+              "Word": "陈"
+            },
+            {
+              "OffsetStartMs": 12900,
+              "OffsetEndMs": 13080,
+              "Word": "军"
+            },
+            {
+              "OffsetStartMs": 13080,
+              "OffsetEndMs": 13380,
+              "Word": "老师"
+            },
+            {
+              "OffsetStartMs": 13380,
+              "OffsetEndMs": 13860,
+              "Word": "主讲"
+            },
+            {
+              "OffsetStartMs": 13860,
+              "OffsetEndMs": 14460,
+              "Word": "总结"
+            },
+            {
+              "OffsetStartMs": 14460,
+              "OffsetEndMs": 15030,
+              "Word": "十多"
+            },
+            {
+              "OffsetStartMs": 15030,
+              "OffsetEndMs": 15330,
+              "Word": "种"
+            },
+            {
+              "OffsetStartMs": 15330,
+              "OffsetEndMs": 15570,
+              "Word": "速记"
+            },
+            {
+              "OffsetStartMs": 15570,
+              "OffsetEndMs": 15870,
+              "Word": "单词"
+            },
+            {
+              "OffsetStartMs": 15870,
+              "OffsetEndMs": 15960,
+              "Word": "的"
+            },
+            {
+              "OffsetStartMs": 15960,
+              "OffsetEndMs": 16410,
+              "Word": "方法"
+            },
+            {
+              "OffsetStartMs": 15960,
+              "OffsetEndMs": 16410,
+              "Word": "，"
+            },
+            {
+              "OffsetStartMs": 16410,
+              "OffsetEndMs": 17130,
+              "Word": "让孩子"
+            },
+            {
+              "OffsetStartMs": 17130,
+              "OffsetEndMs": 17580,
+              "Word": "爱上"
+            },
+            {
+              "OffsetStartMs": 17580,
+              "OffsetEndMs": 17700,
+              "Word": "学"
+            },
+            {
+              "OffsetStartMs": 17700,
+              "OffsetEndMs": 18090,
+              "Word": "英语"
+            },
+            {
+              "OffsetStartMs": 17700,
+              "OffsetEndMs": 18090,
+              "Word": "，"
+            },
+            {
+              "OffsetStartMs": 18090,
+              "OffsetEndMs": 18480,
+              "Word": "扫码"
+            },
+            {
+              "OffsetStartMs": 18480,
+              "OffsetEndMs": 18900,
+              "Word": "进群"
+            },
+            {
+              "OffsetStartMs": 18480,
+              "OffsetEndMs": 18900,
+              "Word": "，"
+            },
+            {
+              "OffsetStartMs": 18900,
+              "OffsetEndMs": 19200,
+              "Word": "还有"
+            },
+            {
+              "OffsetStartMs": 19200,
+              "OffsetEndMs": 19440,
+              "Word": "更"
+            },
+            {
+              "OffsetStartMs": 19440,
+              "OffsetEndMs": 19650,
+              "Word": "多的"
+            },
+            {
+              "OffsetStartMs": 19650,
+              "OffsetEndMs": 19920,
+              "Word": "学习"
+            },
+            {
+              "OffsetStartMs": 19920,
+              "OffsetEndMs": 20310,
+              "Word": "资料"
+            },
+            {
+              "OffsetStartMs": 20310,
+              "OffsetEndMs": 20490,
+              "Word": "可以"
+            },
+            {
+              "OffsetStartMs": 20490,
+              "OffsetEndMs": 21210,
+              "Word": "领取"
+            },
+            {
+              "OffsetStartMs": 20490,
+              "OffsetEndMs": 21210,
+              "Word": "。"
+            }
+          ]
+        }
+      ],
+      "ErrorMsg": ""
+    }
+  }
+}

@@ -1,0 +1,6 @@
+/videos/
+/SpeechRecognition/speech-demo/
+/SpeechRecognition/audios/
+/Bert/
+/TextAnalysis/Bert-BiLSTM-CRF-pytorch/model/
+/TextAnalysis/Bert-BiLSTM-CRF-pytorch/data/
