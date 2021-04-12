@@ -1,5 +1,10 @@
 /videos/
 /SpeechRecognition/speech-demo/
 /SpeechRecognition/audios/
-/Bert/
+/TextAnalysis/Bert/
 /TextAnalysis/Bert-BiLSTM-CRF-pytorch/
+/WETEC/
+/RawDataURL/
+/TextAnalysis/vector_embed.npz
+/VideoFetcher/
+/VideoScoring/

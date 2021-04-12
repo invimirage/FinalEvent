@@ -11,9 +11,10 @@
 '''
 import subprocess
 import soundfile
+import os
 
 def get_audio(video_path, audio_path):
-    trans = (r'ffmpeg -i %s -ac 1 -ar 16000 -y -vn %s' % (video_path, audio_path))
+    trans = (r'ffmpeg -i "%s" -ac 1 -ar 16000 -y -vn "%s"' % (video_path, audio_path))
     result = subprocess.Popen(trans, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     out = result.stdout.read()
     temp = str(out.decode('utf-8'))
@@ -22,4 +23,7 @@ def get_audio(video_path, audio_path):
     print("sound sample:%d" % sample_rate)
 
 if __name__ == '__main__':
-    get_audio('../videos/samplead.mp4', 'audios/test.wav')
+    videos_dir = os.listdir('../videos')
+    for video_dir in videos_dir:
+        if video_dir[-3:] == 'mp4':
+            get_audio('../videos/%s' % video_dir, 'audios/%s.wav' % video_dir[:-4])

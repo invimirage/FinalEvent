@@ -9,6 +9,7 @@ import base64
 import pandas as pd
 import time
 import logging
+import os
 
 logger = logging.getLogger()
 logger.setLevel(logging.DEBUG)
@@ -20,13 +21,19 @@ class audio_speech_recognizer:
 
     def __init__(self, audio_paths:list):
         self.temp_data = {'file_path': [], 'result_data': [], 'task_id': []}
+        print("In total %d videos" % len(audio_paths))
         for audio in audio_paths:
             self.upload_audio(audio)
+        for task_id in self.temp_data['task_id']:
+            self.get_results(int(task_id), self.temp_data['task_id'].index(task_id))
         self.temp_data = pd.DataFrame(self.temp_data)
-        self.temp_data.to_csv('results.csv', mode='a+', index=False)
+        if os.path.exists('results.csv'):
+            self.temp_data.to_csv('results.csv', mode='a+', index=False, header=False)
+        else:
+            self.temp_data.to_csv('results.csv', mode='a+', index=False, header=True)
 
     def upload_audio(self, file_path):
-        print('Uploading')
+        print('Uploading %s' % file_path)
         try:
             audio_path = file_path
             with open(audio_path, 'rb') as f:
@@ -57,14 +64,14 @@ class audio_speech_recognizer:
             task_id = result_json['Data']['TaskId']
             self.temp_data['file_path'].append(audio_path)
             self.temp_data['task_id'].append(task_id)
-            print('Upload success, now waiting for translation')
-            self.get_results(int(task_id))
+            print('Upload %s success' % file_path)
 
         except TencentCloudSDKException as err:
             print(err)
 
-    def get_results(self, task_id):
+    def get_results(self, task_id, ind):
         try:
+            print("Getting result for %s" % self.temp_data['file_path'][ind])
             cred = credential.Credential(self._secret_id, self._secret_key)
             httpProfile = HttpProfile()
             httpProfile.endpoint = self._endpoint
@@ -96,4 +103,4 @@ class audio_speech_recognizer:
             print(err)
 
 if __name__ == '__main__':
-    tensent_recognizer = audio_speech_recognizer(['audios/test.wav'])
+    tensent_recognizer = audio_speech_recognizer(['audios/' + audio_filename for audio_filename in os.listdir('audios/') if audio_filename[-3:] in ['wav', 'aac']])
