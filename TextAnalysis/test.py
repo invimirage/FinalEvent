@@ -10,5 +10,4 @@
 '''
 
 import torch
-a = torch.tensor([1, 23, 3])
-print(a[2:5])
+print(torch.__version__)

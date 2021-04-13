@@ -35,4 +35,4 @@ include_cols = [
 threshold = 200
 
 # cpc分桶数量
-bin_number = 4
+bin_number = 3

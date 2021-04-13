@@ -91,7 +91,7 @@ class TextScorer:
         input_masks_tensors = torch.tensor(input_masks).to(self.device)
         return tokens_tensor, segments_tensors, input_masks_tensors
 
-    def run_model(self, mode='train', trainning_size=0.8, num_epoch=10):
+    def run_model(self, mode='train', trainning_size=0.8, num_epoch=10, **kwargs):
         self.logger.info('Running model, %s' % mode)
         input_data = self.data_input_tensor.to(self.device)
         tags = self.tag.to(device=self.device, dtype=torch.int64)
@@ -113,6 +113,9 @@ class TextScorer:
                 if epoch % 100 == 0:
                     cpc_pred_train, _ = self.model(train_data)
                     cpc_pred_test, _ = self.model(test_data)
+                    cpc_pred_worst = cpc_pred_test.cpu().detach().numpy()[:, 0].flatten()
+                    top10 = np.array(cpc_pred_worst).argsort()[::-1][0:10]
+                    self.logger.info('Top 10: {}'.format(kwargs['id'][top10]))
                     cpc_pred_train = np.argmax(cpc_pred_train.cpu().detach(), axis=1)
                     cpc_pred_test = np.argmax(cpc_pred_test.cpu().detach(), axis=1)
                     train_tags_cpu = train_tags.cpu()
@@ -206,4 +209,4 @@ if __name__ == '__main__':
     binned_data, cut_points = bin_tags(tag_data, config.bin_number)
     print(cut_points)
     scorer = TextScorer(data=vector_data, tag=binned_data, mode='api', lr=1e-2, batch_size=2000, log_level=logging.INFO)
-    scorer.run_model(num_epoch=10000, trainning_size=0.8)
+    scorer.run_model(num_epoch=10000, trainning_size=0.8, ids=id)
