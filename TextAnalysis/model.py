@@ -19,26 +19,27 @@ import config
 
 
 # ——————构造模型——————
+# 模型输入为embeding之后的向量
 class TextNet(nn.Module):
     def __init__(self, hidden_length, bert_path):  # code_length为fc映射到的维度大小
         super(TextNet, self).__init__()
-        self.textExtractor = BertModel.from_pretrained(bert_path)
-        embedding_dim = self.textExtractor.config.hidden_size
-        self.fcs = nn.Sequential(
-            nn.Linear(embedding_dim, hidden_length),
+        # embedding_dim = self.textExtractor.config.hidden_size
+        self.layers = nn.Sequential(
+            nn.AdaptiveAvgPool2d(hidden_length),
             nn.ReLU(),
             nn.Linear(hidden_length, 1),
             nn.Sigmoid()
         )
 
-    def forward(self, *args):
-        output = self.textExtractor(args[0], token_type_ids=args[1],
-                                    attention_mask=args[2])
-        text_embeddings = output[0][:, 0, :]
-        # output[0](batch size, sequence length, model hidden dimension)
+    def forward(self, data, tag=None):
+        out = self.layers(data)
+        if tag is not None:
+            criterion = nn.CrossEntropyLoss()
+            loss = criterion(out, tag)
+        else:
+            loss = 0
+        return out, loss
 
-        out = self.fcs(text_embeddings)
-        return out
 
 class deal_embed(nn.Module):
     def __init__(self, bert_out_length, hidden_length):  # code_length为fc映射到的维度大小

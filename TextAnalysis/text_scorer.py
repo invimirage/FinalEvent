@@ -45,16 +45,21 @@ class TextScorer:
         self.data_len = len(self.data)
         self.logger.info('Data length: %d' % self.data_len)
         assert kwargs['mode'] in ['local', 'api']
+        # self.mode = kwargs['mode']
         self.batch_size = kwargs['batch_size']
         if kwargs['mode'] == 'local':
-            bert_path = "Bert/"
-            self.data_input_tensor = self.build_bert_input(bert_path, self.data)
+            bert_path = "../Models/Bert/"
+            if isinstance(self.data[0], str):
+                self.embed = self.bert_embedding(bert_path, self.data)
+                self.data_input_tensor = torch.tensor(self.embed, dtype=torch.float32)
+            else:
+                self.data_input_tensor = torch.from_numpy(self.data).to(torch.float32)
             self.model = TextNet(hidden_length=128, bert_path=bert_path).to(self.device)
 
         else:
-            if type(self.data[0]) == 'str':
+            if isinstance(self.data[0], str):
                 # 如果直接使用tencent API做向量化
-                self.data_input_tensor = torch.from_numpy(self.sentence_embedding(self.data)).to(torch.float32)
+                self.data_input_tensor = torch.from_numpy(self.tencent_embedding(self.data)).to(torch.float32)
             else:
                 self.data_input_tensor = torch.from_numpy(self.data).to(torch.float32)
             self.model = deal_embed(bert_out_length=768, hidden_length=4)
@@ -63,17 +68,19 @@ class TextScorer:
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=kwargs['lr'])
 
 
-    def build_bert_input(self, bert_path, text_data):
+    def bert_embedding(self, bert_path, text_data):
         tokenizer = BertTokenizer(vocab_file=bert_path + "vocab.txt")  # 初始化分词器
         tokens, segments, input_masks = [], [], []
         for text in text_data:
             indexed_tokens = tokenizer.encode(text)  # 索引列表
+            if len(indexed_tokens) > 512:
+                indexed_tokens = indexed_tokens[:512]
             tokens.append(indexed_tokens)
             segments.append([0] * len(indexed_tokens))
             input_masks.append([1] * len(indexed_tokens))
 
         max_len = max([len(single) for single in tokens])  # 最大的句子长度
-        self.logger.debug('batch_size: %d' % len(text_data))
+        self.logger.debug('data_size: %d' % len(text_data))
         self.logger.debug('max_seq_len: %d' % max_len)
         self.logger.debug('avg_seq_len: %d ' % np.mean([len(single) for single in tokens]))
         for j in range(len(tokens)):
@@ -89,12 +96,29 @@ class TextScorer:
         tokens_tensor = torch.tensor(tokens).to(self.device)
         segments_tensors = torch.tensor(segments).to(self.device)
         input_masks_tensors = torch.tensor(input_masks).to(self.device)
-        return tokens_tensor, segments_tensors, input_masks_tensors
+        bert_model = BertModel.from_pretrained(bert_path).to(self.device)
+        bert_model.eval()
+        batch_size = config.bert_batch_size
+        n_batch = len(text_data) // batch_size
+        embeds = []
+        for i in range(n_batch):
+            if i % 100 == 0:
+                self.logger.info('Embedding, %d / %d' % (i, n_batch))
+            sta = i * batch_size
+            end = (i + 1) * batch_size
+            output = bert_model(tokens_tensor[sta:end], token_type_ids=segments_tensors[sta:end],
+                                        attention_mask=input_masks_tensors[sta:end])
+            last_encode = output[0]
+            last_encode = last_encode.cpu().detach().tolist()
+            for embed in last_encode:
+                embeds.append(embed)
+        return embeds
+
 
     def run_model(self, mode='train', trainning_size=0.8, num_epoch=10, **kwargs):
         self.logger.info('Running model, %s' % mode)
-        input_data = self.data_input_tensor.to(self.device)
-        tags = self.tag.to(device=self.device, dtype=torch.int64)
+        input_data = self.data_input_tensor
+        tags = self.tag.to(torch.int64)
         assert mode in ['train', 'predict']
         if mode == 'train':
             indexes = np.arange(self.data_len)
@@ -110,12 +134,19 @@ class TextScorer:
             self.logger.debug('Batch number: %d' % n_batch)
             for epoch in range(num_epoch):
 
-                if epoch % 100 == 0:
-                    cpc_pred_train, _ = self.model(train_data)
+                if epoch % 1000 == 0:
+                    cpc_pred_train, _ = self.model(train_data[::4])
                     cpc_pred_test, _ = self.model(test_data)
                     cpc_pred_worst = cpc_pred_test.cpu().detach().numpy()[:, 0].flatten()
                     top10 = np.array(cpc_pred_worst).argsort()[::-1][0:10]
-                    self.logger.info('Top 10: {}'.format(kwargs['id'][top10]))
+                    self.logger.info('Worst Top 10: {}'.format(kwargs['ids'][top10]))
+                    for i in kwargs['text'][top10]:
+                        self.logger.info(i)
+                    cpc_pred_best = cpc_pred_test.cpu().detach().numpy()[:, -1].flatten()
+                    top10 = np.array(cpc_pred_best).argsort()[::-1][0:10]
+                    self.logger.info('Best Top 10: {}'.format(kwargs['ids'][top10]))
+                    for i in kwargs['text'][top10]:
+                        self.logger.info(i)
                     cpc_pred_train = np.argmax(cpc_pred_train.cpu().detach(), axis=1)
                     cpc_pred_test = np.argmax(cpc_pred_test.cpu().detach(), axis=1)
                     train_tags_cpu = train_tags.cpu()
@@ -135,7 +166,9 @@ class TextScorer:
                 for i in range(n_batch):
                     start = i * self.batch_size
                     # 别忘了这里用了sigmoid归一化
-                    cpc_pred, loss = self.model(train_data[start: start + self.batch_size], train_tags[start: start + self.batch_size])  # text_hashCodes是一个32-dim文本特征
+                    data = train_data[start: start + self.batch_size].to(self.device)
+                    tags = train_tags[start: start + self.batch_size].to(self.device)
+                    cpc_pred, loss = self.model(data, tags)  # text_hashCodes是一个32-dim文本特征
                     self.optimizer.zero_grad()
                     self.logger.debug(loss)
                     loss.backward()
@@ -156,7 +189,7 @@ class TextScorer:
                 loss = F.mse_loss(cpc_pred, tags)
 
 
-    def sentence_embedding(self, sentences):
+    def tencent_embedding(self, sentences):
         vector_embeds = []
         failed_inds = []
         for ind, sentence in enumerate(sentences):
@@ -188,10 +221,14 @@ class TextScorer:
         np.savez('vector_embed', embed=np.array(vector_embeds), dropped_ind=np.array(failed_inds))
         return vector_embeds
 
-if __name__ == '__main__':
-    data_path = r'C:\Users\zrf19\PycharmProjects\pythonProject\FinalEvent\RawDataURL\kuaishou_data_es.csv'
+def main(data_source, embed_type):
+    assert data_source in ['raw', 'embed']
+    assert embed_type in ['api', 'local']
+    data_path = '../Data/kuaishou_data_es.csv'
+    # embed_data = np.load('../Data/vector_embed.npz')
+    # dropped_data = embed_data['dropped_ind']
     data = pd.read_csv(data_path)
-    text_data = list(data['full_texts'])
+    # data.drop(index=data.index[dropped_data]
     imp = np.array(data['clk'])
     beh = np.array(data['bclk'])
     id = np.array(data['id'])
@@ -202,11 +239,30 @@ if __name__ == '__main__':
     # # plt.show()
     # TextScorer(data=text_data, tag=tag_data, mode='api', lr=1e-3)
 
-    embed_data = np.load('vector_embed.npz')
-    vector_data = embed_data['embed']
-    tag_data = np.delete(tag_data, embed_data['dropped_ind'])
+    # vector_data = embed_data['embed']
+    # tag_data = np.delete(tag_data, embed_data['dropped_ind'])
 
     binned_data, cut_points = bin_tags(tag_data, config.bin_number)
-    print(cut_points)
-    scorer = TextScorer(data=vector_data, tag=binned_data, mode='api', lr=1e-2, batch_size=2000, log_level=logging.INFO)
-    scorer.run_model(num_epoch=10000, trainning_size=0.8, ids=id)
+    text_data = np.array(data['full_texts'])
+
+    if data_source == 'raw':
+        scorer = TextScorer(data=text_data, tag=binned_data, mode=embed_type, lr=1e-2, batch_size=2000,
+                            log_level=logging.INFO)
+        embed_data = scorer.embed
+        data['embed_' + embed_type] = embed_data
+        data.to_csv(data_path, index=False)
+
+    else:
+        try:
+            embed_data = np.array(data['embed_' + embed_type])
+        except:
+            print('Text embedding not found!')
+            exit(0)
+        scorer = TextScorer(data=embed_data, tag=binned_data, mode=embed_type, lr=1e-2, batch_size=2000,
+                            log_level=logging.INFO)
+    scorer.logger.info(cut_points)
+    scorer.run_model(num_epoch=10000, trainning_size=0.8, ids=id, text=text_data)
+
+if __name__ == '__main__':
+
+    main('raw', 'local')

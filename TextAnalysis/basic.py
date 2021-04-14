@@ -19,7 +19,7 @@ import pymysql
 class DataParser:
     def __init__(
         self,
-        data_path=r"C:\Users\zrf19\PycharmProjects\pythonProject\FinalEvent\RawDataURL\Data.csv",
+        data_path="../Data/Data.csv",
         **kwargs
     ):
         logging.basicConfig(
@@ -27,7 +27,7 @@ class DataParser:
         )
         self.logger = logging.getLogger("Logger")
         self.logger.setLevel(logging.DEBUG)
-        self.data_folder = "\\".join(data_path.split("\\")[:-1]) + "\\"
+        self.data_folder = "/".join(data_path.split("/")[:-1]) + "/"
         self.logger.debug("folder : %s" % self.data_folder)
         if kwargs["from_db"]:
             data = self.get_data_from_db()
@@ -237,4 +237,119 @@ class DataParser:
 
 
 if __name__ == "__main__":
-    DataParser(es=True, analyze=False, from_db=False)
+    DataParser(es=True, analyze=False, from_db=True)
+
+# type WetecMaterialDailyReport struct {
+# 	Id           string    `json:"-"`
+# 	Medid        int64     `json:"medid"`
+# 	Matid        int64     `json:"matid"`
+# 	Vmatids      []string  `json:"vmatids"`
+# 	Date         time.Time `json:"date"`
+# 	Imp          int32     `json:"imp"`          // 快手 封面曝光数: show
+# 	Clk          int32     `json:"clk"`          // 快手 素材曝光数: aclick
+# 	Cost         float64   `json:"cost"`         // 快手 花费(元): charge
+# 	Bclick       int32     `json:"bclk"`         // 快手 行为数据
+# 	Pclick       int32     `json:"pclk"`         // 快手 封面点击数
+# 	Inv          []string  `json:"inv"`          // 头条 广告位置
+# 	Totalplay    int32     `json:"tplay"`        // 头条
+# 	Validplay    int32     `json:"vplay"`        // 头条
+# 	Share        int32     `json:"share"`        // 快手 分享数
+# 	Comment      int32     `json:"comment"`      // 快手 评论数
+# 	Like         int32     `json:"like"`         // 快手 点赞数
+# 	Follow       int32     `json:"follow"`       // 快手 新增关注数
+# 	Cancelfollow int32     `json:"cancelfollow"` // 快手 取消关注数
+# 	Report       int32     `json:"report"`       // 快手 举报数
+# 	Block        int32     `json:"block"`        // 快手 拉黑数
+# 	Negative     int32     `json:"negative"`     // 快手 减少此类作品数
+# 	Play3scount  int32     `json:"play3s"`       // 快手 3秒播放数
+# }
+#
+# type UploadInfo struct {
+# 	CreateId   int64     // 视频或图片上传者ID
+# 	RegionId   int64     // 地域ID
+# 	DirectId   int64     // 编导ID
+# 	ShootId    int64     // 摄影ID
+# 	ScriptId   int64     // 脚本ID
+# 	CreateTime time.Time // 上传时间
+# 	Sharedids  []int64   // 分享用户
+# }
+# type MaterialInfo struct {
+# 	Materialid int64
+# 	Source     int32
+# }
+#
+# //	PUT /creative-report-2019-*/_mapping
+# //	{
+# //		"properties": {
+# //			"source": {
+# //				"type": "keyword"
+# //			}
+# //		}
+# //	}
+#
+# type WetecCreativeDailyReport struct { // KEYWORD：ES使用的是倒排索引(NUMERIC类型为了能有效的支持范围查询，它的存储结构并不是倒排索引。)
+# 	Id       string    `json:"-"`
+# 	Name     string    `json:"name" type:"text,keyword"`              //
+# 	Advid    int64     `json:"advid" type:"keyword"`                  //
+# 	Medid    int64     `json:"medid" type:"keyword"`                  //
+# 	Acctp    int32     `json:"acctp" type:"keyword"`                  //
+# 	Frmtp    int32     `json:"frmtp" type:"keyword"`                  //
+# 	Cretp    int32     `json:"cretp" type:"keyword"`                  //
+# 	Accid    int64     `json:"accid" type:"keyword"`                  //
+# 	Cmpid    int64     `json:"cmpid" type:"keyword"`                  //
+# 	Adgid    int64     `json:"adgid" type:"keyword"`                  //
+# 	Creid    int64     `json:"creid" type:"keyword"`                  //
+# 	Matid    int64     `json:"matid" type:"keyword"`                  // 致维ID
+# 	Source   int32     `json:"source" type:"keyword"`                 //
+# 	Vusrid   int64     `json:"vusrid" type:"keyword"`                 // 视频上传用户
+# 	Vregid   int64     `json:"vregid" type:"keyword"`                 // 视频上传用户地域
+# 	Directid int64     `json:"directid" type:"keyword"`               //
+# 	Shootid  int64     `json:"shootid" type:"keyword"`                //
+# 	Scriptid int64     `json:"scriptid" type:"keyword"`               //
+# 	Shareids []int64   `json:"sharedids" type:"keyword"`              //
+# 	Pusrid   int64     `json:"pusrid" type:"keyword"`                 // 图片上传用户
+# 	Vmatids  []string  `json:"vmatids" type:"text,keyword,fielddata"` //
+# 	Pmatids  []string  `json:"pmatids" type:"text,keyword,fielddata"` //
+# 	Vtime    time.Time `json:"vtime" type:"date"`                     // 视频上传时间
+# 	Ptime    time.Time `json:"ptime" type:"date"`                     // 图片上传时间
+# 	Date     time.Time `json:"date"  type:"date"`                     //
+# 	Inv      []string  `json:"inv" type:"text,keyword,fielddata"`     // 头条 广告位置
+#
+# 	Imp  int32   `json:"imp" type:"integer"` // 快手 封面曝光数: show
+# 	Clk  int32   `json:"clk" type:"integer"` // 快手 素材曝光数: aclick
+# 	Cost float64 `json:"cost" type:"float"`  // 快手 花费(元): charge
+#
+# 	Bclick int32 `json:"bclk" type:"integer"` // 快手 行为数据
+# 	Pclick int32 `json:"pclk" type:"integer"` // 快手 封面点击数
+#
+# 	Totalplay int32 `json:"tplay" type:"integer"` // 头条
+# 	Validplay int32 `json:"vplay" type:"integer"` // 头条
+#
+# 	Share        int32   `json:"share" type:"integer"`        // 快手 分享数
+# 	Comment      int32   `json:"comment" type:"integer"`      // 快手 评论数
+# 	Like         int32   `json:"like" type:"integer"`         // 快手 点赞数
+# 	Follow       int32   `json:"follow" type:"integer"`       // 快手 新增关注数
+# 	Cancelfollow int32   `json:"cancelfollow" type:"integer"` // 快手 取消关注数
+# 	Report       int32   `json:"report" type:"integer"`       // 快手 举报数
+# 	Block        int32   `json:"block" type:"integer"`        // 快手 拉黑数
+# 	Negative     int32   `json:"negative" type:"integer"`     // 快手 减少此类作品数
+# 	Play3scont   int32   `json:"play3s" type:"integer"`       // 快手 3秒播放数
+# 	DownStart    int32   `json:"downstart" type:"integer"`    // 快手
+# 	DownComplte  int32   `json:"downcomplte" type:"integer"`  // 快手
+# 	Nstay        int32   `json:"nstay" type:"integer"`        // 快手 次留存
+# 	Nstaycost    float64 `json:"nstaycost" type:"float"`      // 快手 次留成本
+#
+# 	Activation int32 `json:"activation" type:"integer"` // 百度快手
+#
+# 	PlayCount0 int32 `json:"playcount0" type:"integer"` // 百度 播放完成数
+# 	PlayCount1 int32 `json:"playcount1" type:"integer"` // 百度 25%进度播放数
+# 	PlayCount2 int32 `json:"playcount2" type:"integer"` // 百度 50%进度播放数
+# 	PlayCount3 int32 `json:"playcount3" type:"integer"` // 百度 75%进度播放数
+# 	PlayCount4 int32 `json:"playcount4" type:"integer"` // 百度 100%进度播放数
+#
+# 	Dcount int32 `json:"dcount" type:"integer"` // 腾讯 APP下载完成量
+# 	Acount int32 `json:"acount" type:"integer"` // 腾讯 APP激活总量
+# 	Kcount int32 `json:"kcount" type:"integer"` // 腾讯 关键页面访问成本
+# 	Ccount int32 `json:"ccount" type:"integer"` // 腾讯 目标转化量
+# }
+

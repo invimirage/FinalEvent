@@ -36,3 +36,6 @@ threshold = 200
 
 # cpc分桶数量
 bin_number = 3
+
+# bert输入维度
+bert_batch_size = 1
