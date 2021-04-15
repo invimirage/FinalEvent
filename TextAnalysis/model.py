@@ -25,10 +25,9 @@ class TextNet(nn.Module):
         super(TextNet, self).__init__()
         # embedding_dim = self.textExtractor.config.hidden_size
         self.layers = nn.Sequential(
-            nn.AdaptiveAvgPool2d(hidden_length),
-            nn.ReLU(),
-            nn.Linear(hidden_length, 1),
-            nn.Sigmoid()
+            # nn.AdaptiveAvgPool2d(hidden_length),
+            # nn.ReLU(),
+            nn.Linear(hidden_length, config.bin_number),
         )
 
     def forward(self, data, tag=None):
