@@ -103,4 +103,4 @@ class audio_speech_recognizer:
             print(err)
 
 if __name__ == '__main__':
-    tensent_recognizer = audio_speech_recognizer(['audios/' + audio_filename for audio_filename in os.listdir('audios/') if audio_filename[-3:] in ['wav', 'aac']])
+    tensent_recognizer = audio_speech_recognizer(['../Data/audios/' + audio_filename for audio_filename in os.listdir('../Data/audios/') if audio_filename[-3:] in ['wav', '']])

@@ -23,7 +23,7 @@ def get_audio(video_path, audio_path):
     print("sound sample:%d" % sample_rate)
 
 if __name__ == '__main__':
-    videos_dir = os.listdir('../videos')
+    videos_dir = os.listdir('../Data/videos')
     for video_dir in videos_dir:
         if video_dir[-3:] == 'mp4':
-            get_audio('../videos/%s' % video_dir, 'audios/%s.wav' % video_dir[:-4])
+            get_audio('../Data/videos/%s' % video_dir, '../Data/audios/%s.wav' % video_dir[:-4])
