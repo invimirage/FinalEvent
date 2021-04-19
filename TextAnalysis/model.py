@@ -1,12 +1,12 @@
 #!/usr/bin/env python
 # encoding: utf-8
-'''
+"""
 @author: zhangruifeng
 @contact: zrf1999@pku.edu.cn
 @file: model.py
 @time: 2021/3/21 10:58
 @github: local 16351726fa15c85f565b7d5fecdf320ea67a72ef
-'''
+"""
 from transformers import BertModel, BertConfig, BertTokenizer
 import torch
 import time
@@ -40,6 +40,48 @@ class TextNet(nn.Module):
         return out, loss
 
 
+class DoubleNet(nn.Module):
+    def __init__(self, input_length, hidden_length, drop_out_rate):
+        super(DoubleNet, self).__init__()
+        self.quality_judger = nn.Sequential(
+            nn.Linear(input_length, hidden_length),
+            nn.Dropout(drop_out_rate),
+            nn.ReLU(),
+            nn.Linear(hidden_length, config.bin_number),
+        )
+        self.weight_judger = nn.Sequential(
+            nn.BatchNorm1d(input_length),
+            nn.Linear(input_length, hidden_length),
+            nn.Dropout(drop_out_rate),
+            nn.ReLU(),
+            nn.Linear(hidden_length, 1),
+            nn.Sigmoid(),
+        )
+
+    # seperates [0, 10, 30]递增序列，表示一个文本的分段在batch中的位置
+    def forward(self, data, tag=None, seperates=None):
+        weight_out = self.weight_judger(data)
+        quality_out = self.quality_judger(data) * weight_out
+        num_texts = len(seperates) - 1
+        criterion = nn.NLLLoss()
+        output = []
+        for i in range(num_texts):
+            sta = seperates[i]
+            end = seperates[i + 1]
+            # log_prob = torch.log(quality_out[sta:end] + 1e-20)
+            probs = quality_out[sta:end]
+            mean_prob = torch.mean(probs, dim=0, keepdim=True)
+            output.append(mean_prob)
+        output_tensor = torch.cat(output)
+        out_probs = F.softmax(output_tensor, dim=1).detach()
+        if tag is not None:
+            criterion = nn.CrossEntropyLoss()
+            loss = criterion(output_tensor, tag)
+        else:
+            loss = 0
+        return out_probs, loss
+
+
 class deal_embed(nn.Module):
     def __init__(self, bert_out_length, hidden_length):  # code_length为fc映射到的维度大小
         super(deal_embed, self).__init__()
@@ -58,9 +100,10 @@ class deal_embed(nn.Module):
             loss = 0
         return out, loss
 
-if __name__ == '__main__':
-    tn = TextNet(128, 'Bert/')
+
+if __name__ == "__main__":
+    tn = TextNet(128, "Bert/")
     for name, param in tn.textExtractor.named_parameters():
-        if name == 'pooler.dense.weight':
+        if name == "pooler.dense.weight":
             print(param.shape)
         print(name)

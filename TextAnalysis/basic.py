@@ -14,14 +14,12 @@ from elasticsearch import Elasticsearch
 import json
 import config
 import pymysql
+import re
+from matplotlib import pyplot as plt
 
 
 class DataParser:
-    def __init__(
-        self,
-        data_path="../Data/Data.csv",
-        **kwargs
-    ):
+    def __init__(self, data_path="../Data/Data", **kwargs):
         logging.basicConfig(
             format="%(asctime)s - %(message)s", datefmt="%d-%b-%y %H:%M:%S"
         )
@@ -109,9 +107,87 @@ class DataParser:
             self.get_data_status(tencent_data, "tencent")
 
         self.data = kuaishou_data.copy()
+
         if kwargs["es"]:
             # 目前只搞快手
             self.get_es_data(kuaishou_data["id"])
+            self.data.to_csv(self.data_folder + "kuaishou_data_es.csv")
+
+        self.seperate_text()
+        self.data.to_csv(self.data_folder + "kuaishou_data_es.csv")
+
+    def seperate_text(self):
+        data = self.data
+        # text_data = data["full_texts"]
+        raw_data = data["audio_text"]
+        ids = data["id"]
+        seperated_len = []
+        seps = []
+        seperated_text = []
+        sum = 0
+        for raw, id in zip(raw_data, ids):
+            sentences = []
+            raw = json.loads(raw)
+            words_with_time = []
+            for res_detail in raw["Response"]["Data"]["ResultDetail"]:
+                words_with_time.extend(res_detail["Words"])
+            word_num = len(words_with_time)
+            sentence = ""
+            for i in range(word_num):
+                sta = words_with_time[i]["OffsetStartMs"]
+                end = words_with_time[i]["OffsetEndMs"]
+                word = words_with_time[i]["Word"]
+                if i < word_num - 1:
+                    next_sta = words_with_time[i + 1]["OffsetStartMs"]
+                else:
+                    next_sta = 0
+                sentence += word
+                # 考虑分句
+                if int(next_sta) - int(end) > 20 or word in ["，", "。"]:
+                    # 必分，查看长度
+                    if i == word_num - 1 or word == "。":
+                        # 长度太短，嫩加就加到上一句
+                        if len(sentence) <= 10 and len(sentences) > 0:
+                            sentences[-1] += sentence
+                        else:
+                            sentences.append(sentence)
+                        sentence = ""
+
+                    # 不是必分，长度够了才分
+                    if len(sentence) > 10:
+                        sentences.append(sentence)
+                        sentence = ""
+
+            for sep in sentences:
+                if len(sep) > 50:
+                    sum += 1
+                    # print(sep, id)
+                    # print(raw)
+                seperated_len.append(len(sep))
+            seps.append(len(sentences))
+            seperated_text.append(json.dumps(sentences))
+            # if len(sentences) == 0:
+            #     print(id, text, raw)
+            # if len(text) > 50:
+            #     print(text)
+        seperated_len = np.array(seperated_len)
+        seps = np.array(seps)
+        self.logger.info("Super long text slice number: %d" % sum)
+        self.logger.info(
+            "Slice length, min %d, mean %.2lf, max %d"
+            % (seperated_len.min(), seperated_len.mean(), seperated_len.max())
+        )
+        self.logger.info(
+            "Slice number, min %d, mean %.2lf, max %d"
+            % (seps.min(), seps.mean(), seps.max())
+        )
+        self.data["separated_text"] = seperated_text
+        # fig, subs = plt.subplots(2, 1)
+        # subs[0].hist(seps, bins=10)
+        #
+        # subs[1].hist(seperated_len, bins=10)
+        #
+        # plt.show()
 
     def get_data_from_db(self):
         # 打开数据库连接
@@ -187,8 +263,8 @@ class DataParser:
         for agg_field, target in agg_fields.items():
             aggs[agg_field] = {"sum": {"field": target}}
         query = {
-            "size": 0,
-            "_source": {"includes": ["matid", "date"]},
+            "size": 1,
+            "_source": {"includes": ["matid", "date", "vtime"]},
             "aggs": {
                 agg_name: {
                     "terms": {
@@ -200,21 +276,36 @@ class DataParser:
                 }
             },
             "query": {
-                "bool": {"must": [{"terms": {"matid": matids}}, {"term": {"medid": 8}}]}
+                "bool": {
+                    "must": [
+                        {"terms": {"matid": matids}},
+                        {"term": {"medid": 8}},
+                        {
+                            "script": {
+                                "script": {
+                                    "source": "doc['date'].value.getMillis() - doc['vtime'].value.getMillis() <= params.aMonth",
+                                    "params": {"aMonth": 2592000000},
+                                }
+                            }
+                        },
+                    ],
+                    "filter": {"range": {"vtime": {"lte": "now-30d/d"}}},
+                }
             },
+            "sort": [{"date": {"order": "desc"}}],
         }
-        result = es.search(index="creative-report-2021-*", body=query)
+        result = es.search(index="creative-report-*", body=query)
         self.logger.debug(result["_shards"])
+        self.logger.debug(result["hits"]["hits"][0])
         sale_data = result["aggregations"][agg_name]["buckets"]
         self.logger.debug(
             "Bucket length: %d, id length %d" % (len(sale_data), len(matids))
         )
         id_dict = {}
-
         for dta in sale_data:
-            # clk即素材曝光数量少于阈值
-            if dta['clk']['value'] < config.threshold:
-                continue
+            # # clk即素材曝光数量少于阈值，默认素材不好，bctr为0
+            # if dta["clk"]["value"] < config.threshold:
+            #     continue
             id_dict[dta["key"]] = {}
             for field in agg_fields:
                 id_dict[dta["key"]][field] = dta[field]["value"]
@@ -233,11 +324,10 @@ class DataParser:
         self.data.drop(index=self.data.index[no_data_cols], inplace=True)
         for field in agg_fields:
             self.data[field] = new_cols[field]
-        self.data.to_csv(self.data_folder + "kuaishou_data_es.csv")
 
 
 if __name__ == "__main__":
-    DataParser(es=True, analyze=False, from_db=True)
+    DataParser(data_path='../Data/kuaishou_data_es.csv', es=False, analyze=False, from_db=False)
 
 # type WetecMaterialDailyReport struct {
 # 	Id           string    `json:"-"`
@@ -352,4 +442,3 @@ if __name__ == "__main__":
 # 	Kcount int32 `json:"kcount" type:"integer"` // 腾讯 关键页面访问成本
 # 	Ccount int32 `json:"ccount" type:"integer"` // 腾讯 目标转化量
 # }
-

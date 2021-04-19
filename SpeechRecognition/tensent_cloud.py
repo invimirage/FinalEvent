@@ -3,7 +3,9 @@ import json
 from tencentcloud.common import credential
 from tencentcloud.common.profile.client_profile import ClientProfile
 from tencentcloud.common.profile.http_profile import HttpProfile
-from tencentcloud.common.exception.tencent_cloud_sdk_exception import TencentCloudSDKException
+from tencentcloud.common.exception.tencent_cloud_sdk_exception import (
+    TencentCloudSDKException,
+)
 from tencentcloud.asr.v20190614 import asr_client, models
 import base64
 import pandas as pd
@@ -14,31 +16,32 @@ import os
 logger = logging.getLogger()
 logger.setLevel(logging.DEBUG)
 
+
 class audio_speech_recognizer:
     _secret_id = "AKIDlJdkbExRlwueDaqjZAaomVFlDSVOuqCL"
     _secret_key = "iTefWR6XklmIfroVyQergHqAG9qIsvkO"
     _endpoint = "asr.tencentcloudapi.com"
 
-    def __init__(self, audio_paths:list):
-        self.temp_data = {'file_path': [], 'result_data': [], 'task_id': []}
+    def __init__(self, audio_paths: list):
+        self.temp_data = {"file_path": [], "result_data": [], "task_id": []}
         print("In total %d videos" % len(audio_paths))
         for audio in audio_paths:
             self.upload_audio(audio)
-        for task_id in self.temp_data['task_id']:
-            self.get_results(int(task_id), self.temp_data['task_id'].index(task_id))
+        for task_id in self.temp_data["task_id"]:
+            self.get_results(int(task_id), self.temp_data["task_id"].index(task_id))
         self.temp_data = pd.DataFrame(self.temp_data)
-        if os.path.exists('results.csv'):
-            self.temp_data.to_csv('results.csv', mode='a+', index=False, header=False)
+        if os.path.exists("results.csv"):
+            self.temp_data.to_csv("results.csv", mode="a+", index=False, header=False)
         else:
-            self.temp_data.to_csv('results.csv', mode='a+', index=False, header=True)
+            self.temp_data.to_csv("results.csv", mode="a+", index=False, header=True)
 
     def upload_audio(self, file_path):
-        print('Uploading %s' % file_path)
+        print("Uploading %s" % file_path)
         try:
             audio_path = file_path
-            with open(audio_path, 'rb') as f:
+            with open(audio_path, "rb") as f:
                 audio_data = f.read()
-            audio_data_b64 = base64.b64encode(audio_data).decode('utf-8')
+            audio_data_b64 = base64.b64encode(audio_data).decode("utf-8")
             cred = credential.Credential(self._secret_id, self._secret_key)
             httpProfile = HttpProfile()
             httpProfile.endpoint = self._endpoint
@@ -55,23 +58,23 @@ class audio_speech_recognizer:
                 "SpeakerNumber": 1,
                 "ResTextFormat": 2,
                 "SourceType": 1,
-                "Data": audio_data_b64
+                "Data": audio_data_b64,
             }
             req.from_json_string(json.dumps(params))
 
             resp = client.CreateRecTask(req)
             result_json = json.loads(resp.to_json_string())
-            task_id = result_json['Data']['TaskId']
-            self.temp_data['file_path'].append(audio_path)
-            self.temp_data['task_id'].append(task_id)
-            print('Upload %s success' % file_path)
+            task_id = result_json["Data"]["TaskId"]
+            self.temp_data["file_path"].append(audio_path)
+            self.temp_data["task_id"].append(task_id)
+            print("Upload %s success" % file_path)
 
         except TencentCloudSDKException as err:
             print(err)
 
     def get_results(self, task_id, ind):
         try:
-            print("Getting result for %s" % self.temp_data['file_path'][ind])
+            print("Getting result for %s" % self.temp_data["file_path"][ind])
             cred = credential.Credential(self._secret_id, self._secret_key)
             httpProfile = HttpProfile()
             httpProfile.endpoint = self._endpoint
@@ -81,9 +84,7 @@ class audio_speech_recognizer:
             client = asr_client.AsrClient(cred, "", clientProfile)
 
             req = models.DescribeTaskStatusRequest()
-            params = {
-                "TaskId": task_id
-            }
+            params = {"TaskId": task_id}
             req.from_json_string(json.dumps(params))
             seconds = 0
             while True:
@@ -91,16 +92,23 @@ class audio_speech_recognizer:
                 seconds += 1
                 resp = client.DescribeTaskStatus(req)
                 result_json = json.loads(resp.to_json_string())
-                result_status = result_json['Data']['StatusStr']
-                if result_status in ['success', 'failed']:
+                result_status = result_json["Data"]["StatusStr"]
+                if result_status in ["success", "failed"]:
                     break
                 print(seconds)
-            result_data = result_json['Data']['ResultDetail']
+            result_data = result_json["Data"]["ResultDetail"]
             result_data_str = json.dumps(result_data, ensure_ascii=False)
-            self.temp_data['result_data'].append(result_data_str)
+            self.temp_data["result_data"].append(result_data_str)
 
         except TencentCloudSDKException as err:
             print(err)
 
-if __name__ == '__main__':
-    tensent_recognizer = audio_speech_recognizer(['../Data/audios/' + audio_filename for audio_filename in os.listdir('../Data/audios/') if audio_filename[-3:] in ['wav', '']])
+
+if __name__ == "__main__":
+    tensent_recognizer = audio_speech_recognizer(
+        [
+            "../Data/audios/" + audio_filename
+            for audio_filename in os.listdir("../Data/audios/")
+            if audio_filename[-3:] in ["wav", ""]
+        ]
+    )
