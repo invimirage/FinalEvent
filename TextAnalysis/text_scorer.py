@@ -150,7 +150,7 @@ class TextScorer:
             self.logger.debug(masked_output.shape)
             pooled_output = torch.mean(masked_output, dim=1)
             self.logger.debug(pooled_output.shape)
-            embed = pooled_output.cpu().detach().tolist()[0]
+            embed = pooled_output.cpu().detach().tolist()
             self.logger.debug(len(embed))
             embeds.append(embed)
             torch.cuda.empty_cache()
@@ -333,8 +333,8 @@ def main(data_source, embed_type, log_level):
 
     else:
         try:
-            embed_datafile = np.load("vector_embed")
-            embed_data = embed_datafile['embed']
+            embed_datafile = np.load("vector_embed.npz")
+            embed_data = np.reshape(embed_datafile['embed'], (-1, embed_datafile['embed'].shape[-1]))
             sep_points = embed_datafile['sep_points']
             embed_data = np.array(embed_data, dtype=float)
         except:
@@ -356,4 +356,4 @@ def main(data_source, embed_type, log_level):
 if __name__ == "__main__":
     # data_source raw embed
     # embed_type local api
-    main(data_source="raw", embed_type="local", log_level=logging.INFO)
+    main(data_source="embed", embed_type="local", log_level=logging.INFO)

@@ -6,14 +6,16 @@ import re
 from matplotlib import pyplot as plt
 import torch
 
-
-train_inds = [1, 2, 3]
-separate_points = np.array([0, 10, 30, 100, 160, 900])
-input_data = np.random.random((900, 10))
-map_to_training = separate_points[train_inds], separate_points[np.array(train_inds)+1]
-print(map_to_training)
-train_data = input_data[np.concatenate([np.arange(sta, end) for sta, end in zip(*map_to_training)])]
-print(train_data)
+a = np.random.random((2,  3, 4))
+print(a)
+print(np.reshape(a, (-1, 4)))
+# train_inds = [1, 2, 3]
+# separate_points = np.array([0, 10, 30, 100, 160, 900])
+# input_data = np.random.random((900, 10))
+# map_to_training = separate_points[train_inds], separate_points[np.array(train_inds)+1]
+# print(map_to_training)
+# train_data = input_data[np.concatenate([np.arange(sta, end) for sta, end in zip(*map_to_training)])]
+# print(train_data)
 # a = torch.tensor([[1.0, 2.0, 3.0]])
 # b = torch.tensor([[1.0, 2.0, 3.0]])
 # c = [a, b]
