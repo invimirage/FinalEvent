@@ -6,9 +6,23 @@ import re
 from matplotlib import pyplot as plt
 import torch
 
-a = np.random.random((2,  3, 4))
-print(a)
-print(np.reshape(a, (-1, 4)))
+data_file = pd.read_csv('Data/kuaishou_data_es.csv')
+print(data_file.columns)
+c = []
+for i, id in zip(data_file['advids'], data_file['id']):
+    try:
+        c.append(len(i.split(',')))
+        if c[-1] > 1:
+            print(id)
+    except:
+        print(id)
+print(np.mean(c), np.max(c))
+
+# a = 10
+# print(round(a/3))
+# a = np.random.random((2,  3, 4))
+# print(a)
+# print(np.reshape(a, (-1, 4)))
 # train_inds = [1, 2, 3]
 # separate_points = np.array([0, 10, 30, 100, 160, 900])
 # input_data = np.random.random((900, 10))

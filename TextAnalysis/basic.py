@@ -111,10 +111,10 @@ class DataParser:
         if kwargs["es"]:
             # 目前只搞快手
             self.get_es_data(kuaishou_data["id"])
-            self.data.to_csv(self.data_folder + "kuaishou_data_es.csv")
+            self.data.to_csv(self.data_folder + kwargs['target_file_name'])
 
         self.seperate_text()
-        self.data.to_csv(self.data_folder + "kuaishou_data_es.csv")
+        self.data.to_csv(self.data_folder + kwargs['target_file_name'])
 
     def seperate_text(self):
         data = self.data
@@ -327,7 +327,7 @@ class DataParser:
 
 
 if __name__ == "__main__":
-    DataParser(data_path='../Data/kuaishou_data_es.csv', es=False, analyze=False, from_db=False)
+    DataParser(data_path='../Data/kuaishou_data_0420.csv', target_file_name='kuaishou_data_0420.csv', es=True, analyze=False, from_db=False)
 
 # type WetecMaterialDailyReport struct {
 # 	Id           string    `json:"-"`

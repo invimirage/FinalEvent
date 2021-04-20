@@ -59,21 +59,27 @@ class DoubleNet(nn.Module):
         )
 
     # seperates [0, 10, 30]递增序列，表示一个文本的分段在batch中的位置
-    def forward(self, data, tag=None, seperates=None):
+    def forward(self, data, tag=None, separates=None):
         weight_out = self.weight_judger(data)
+        # print(1, weight_out)
         quality_out = self.quality_judger(data) * weight_out
-        num_texts = len(seperates) - 1
-        criterion = nn.NLLLoss()
+        # print(2, quality_out)
+        num_texts = len(separates) - 1
+        # print(3, num_texts)
         output = []
         for i in range(num_texts):
-            sta = seperates[i]
-            end = seperates[i + 1]
+            sta = separates[i]
+            end = separates[i + 1]
             # log_prob = torch.log(quality_out[sta:end] + 1e-20)
             probs = quality_out[sta:end]
             mean_prob = torch.mean(probs, dim=0, keepdim=True)
+            # print(mean_prob.shape)
             output.append(mean_prob)
+        # print(output)
         output_tensor = torch.cat(output)
+        # print(output_tensor.shape)
         out_probs = F.softmax(output_tensor, dim=1).detach()
+        # print(tag)
         if tag is not None:
             criterion = nn.CrossEntropyLoss()
             loss = criterion(output_tensor, tag)

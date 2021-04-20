@@ -45,6 +45,7 @@ class TextScorer:
         self.logger = logging.getLogger("log")
         self.logger.setLevel(kwargs["log_level"])
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        # self.device = "cpu"
         self.logger.info("Device: %s" % self.device)
         self.data = kwargs["data"]
         self.tag = torch.tensor(kwargs["tag"])
@@ -102,7 +103,7 @@ class TextScorer:
         bert_model = BertModel.from_pretrained(bert_path).to(self.device)
         bert_model.eval()
         batch_size = config.bert_batch_size
-        n_batch = len(separated_texts) // batch_size
+        n_batch = len(separated_texts) // batch_size + int(len(separate_points) % batch_size > 0)
         embeds = []
         for i in range(n_batch):
             if i % 100 == 0:
@@ -166,22 +167,38 @@ class TextScorer:
             np.random.shuffle(indexes)
             train_len = round(self.data_len * trainning_size)
             train_inds = indexes[:train_len]
+            self.logger.info('Training data length: %d' % len(train_inds))
             test_inds = indexes[train_len:]
             self.separate_points = np.array(self.separate_points, dtype=int)
-            map_to_training = self.separate_points[train_inds], self.separate_points[np.array(train_inds)+1]
+            # 生成的训练、测试数据供测试使用
+            # 取训练集的1/10
+            train_inds_select = train_inds[::10]
+            map_to_training = self.separate_points[train_inds_select], self.separate_points[np.array(train_inds_select)+1]
             train_data = input_data[np.concatenate([np.arange(sta, end) for sta, end in zip(*map_to_training)])]
-            train_tags = tags[train_inds]
+            train_tags = tags[train_inds_select]
+            map_lens_train = [end - sta for sta, end in zip(*map_to_training)]
+            separates_train = [0]
+            for map_len in map_lens_train:
+                separates_train.append(separates_train[-1] + map_len)
 
             map_to_testing = self.separate_points[test_inds], self.separate_points[np.array(test_inds)+1]
             test_data = input_data[np.concatenate([np.arange(sta, end) for sta, end in zip(*map_to_testing)])]
             test_tags = tags[test_inds]
-            n_batch = len(train_data) // self.batch_size
+            map_lens_test = [end - sta for sta, end in zip(*map_to_testing)]
+            separates_test = [0]
+            for map_len in map_lens_test:
+                separates_test.append(separates_test[-1] + map_len)
+
+            n_batch = len(train_inds) // self.batch_size + int(len(train_inds) % self.batch_size > 0)
             self.logger.debug("Batch number: %d" % n_batch)
             for epoch in range(num_epoch):
 
-                if epoch % 1000 == 0:
-                    cpc_pred_train, _ = self.model(train_data[::4].to(self.device))
-                    cpc_pred_test, _ = self.model(test_data.to(self.device))
+                # if epoch % 10 == 0:
+                #     self.logger.info('Epoch number: %d' % epoch)
+
+                if epoch % 10 == 0:
+                    cpc_pred_train, _ = self.model(train_data.to(self.device), separates=separates_train)
+                    cpc_pred_test, _ = self.model(test_data.to(self.device), separates=separates_test)
                     cpc_pred_worst = (
                         cpc_pred_test.cpu().detach().numpy()[:, 0].flatten()
                     )
@@ -198,7 +215,7 @@ class TextScorer:
                         self.logger.info(i)
                     cpc_pred_train = np.argmax(cpc_pred_train.cpu().detach(), axis=1)
                     cpc_pred_test = np.argmax(cpc_pred_test.cpu().detach(), axis=1)
-                    train_tags_cpu = train_tags[::4].cpu()
+                    train_tags_cpu = train_tags.cpu()
                     test_tags_cpu = test_tags.cpu()
                     self.logger.info("------------Epoch %d------------" % epoch)
                     self.logger.info("Training set")
@@ -219,10 +236,19 @@ class TextScorer:
                 for i in range(n_batch):
                     start = i * self.batch_size
                     # 别忘了这里用了sigmoid归一化
-                    data = train_data[start : start + self.batch_size].to(self.device)
-                    tags = train_tags[start : start + self.batch_size].to(self.device)
+                    data_inds = train_inds[start : start + self.batch_size]
+                    # data_inds = [9871, 21763, 30344, 3806, 7942]
+                    # print(data_inds)
+                    map_to_data = self.separate_points[data_inds], self.separate_points[np.array(data_inds) + 1]
+                    map_lens = [end - sta for sta, end in zip(*map_to_data)]
+                    separates = [0]
+                    for map_len in map_lens:
+                        separates.append(separates[-1] + map_len)
+                    # print(separates)
+                    data = input_data[np.concatenate([np.arange(sta, end) for sta, end in zip(*map_to_data)])].to(self.device)
+                    _tags = tags[data_inds].to(self.device)
                     cpc_pred, loss = self.model(
-                        data, tags
+                        data, _tags, separates
                     )  # text_hashCodes是一个32-dim文本特征
                     self.optimizer.zero_grad()
                     self.logger.debug(loss)
@@ -320,22 +346,26 @@ def main(data_source, embed_type, log_level):
             tag=binned_data,
             mode=embed_type,
             lr=1e-2,
-            batch_size=2000,
+            batch_size=1000,
             log_level=log_level,
         )
         embed_data = scorer.embed
         sep_points = scorer.separate_points
         np.savez(
-            "vector_embed",
+            "../Data/vector_embed",
             embed=np.array(embed_data),
             sep_points=np.array(sep_points),
         )
 
     else:
         try:
-            embed_datafile = np.load("vector_embed.npz")
+            embed_datafile = np.load("../Data/vector_embed.npz")
             embed_data = np.reshape(embed_datafile['embed'], (-1, embed_datafile['embed'].shape[-1]))
-            sep_points = embed_datafile['sep_points']
+            sep_points = embed_datafile['sep_points'][:-2]
+            binned_data = binned_data[:-2]
+            # print(binned_data.shape, sep_points.shape, embed_data.shape)
+            # print(sep_points[-1])
+            # print(sep_points[-5:], embed_data.shape)
             embed_data = np.array(embed_data, dtype=float)
         except:
             print("Text embedding not found!")
@@ -345,7 +375,7 @@ def main(data_source, embed_type, log_level):
             tag=binned_data,
             mode=embed_type,
             lr=1e-2,
-            batch_size=2000,
+            batch_size=300,
             log_level=log_level,
         )
         scorer.separate_points = sep_points
