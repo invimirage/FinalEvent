@@ -24,7 +24,7 @@ class DataParser:
             format="%(asctime)s - %(message)s", datefmt="%d-%b-%y %H:%M:%S"
         )
         self.logger = logging.getLogger("Logger")
-        self.logger.setLevel(logging.DEBUG)
+        self.logger.setLevel(kwargs['log_level'])
         self.data_folder = "/".join(data_path.split("/")[:-1]) + "/"
         self.logger.debug("folder : %s" % self.data_folder)
         if kwargs["from_db"]:
@@ -269,7 +269,7 @@ class DataParser:
                 agg_name: {
                     "terms": {
                         "size": len(matids),
-                        "field": "matid",
+                        "script": "doc['matid'].value +','+doc['advid'].value",
                         "order": {"cost": "desc"},
                     },
                     "aggs": aggs,
@@ -283,7 +283,8 @@ class DataParser:
                         {
                             "script": {
                                 "script": {
-                                    "source": "doc['date'].value.getMillis() - doc['vtime'].value.getMillis() <= params.aMonth",
+                                    "source": "doc['date'].value.toInstant().toEpochMilli() - "
+                                              "doc['vtime'].value.toInstant().toEpochMilli() <= params.aMonth",
                                     "params": {"aMonth": 2592000000},
                                 }
                             }
@@ -294,6 +295,8 @@ class DataParser:
             },
             "sort": [{"date": {"order": "desc"}}],
         }
+        self.logger.info('Collecting es data...')
+        self.logger.debug(query)
         result = es.search(index="creative-report-*", body=query)
         self.logger.debug(result["_shards"])
         self.logger.debug(result["hits"]["hits"][0])
@@ -301,33 +304,40 @@ class DataParser:
         self.logger.debug(
             "Bucket length: %d, id length %d" % (len(sale_data), len(matids))
         )
-        id_dict = {}
+        es_data = []
         for dta in sale_data:
-            # # clk即素材曝光数量少于阈值，默认素材不好，bctr为0
-            # if dta["clk"]["value"] < config.threshold:
-            #     continue
-            id_dict[dta["key"]] = {}
+            id, advid = dta['key'].split(',')
+            this_data = [id, advid]
             for field in agg_fields:
-                id_dict[dta["key"]][field] = dta[field]["value"]
+                this_data.append(dta[field]['value'])
+            es_data.append(this_data)
 
         # 包含没有es数据和es数据量太少的
-        no_data_cols = []
-        new_cols = {field: [] for field in agg_fields}
-        for col_num, id in enumerate(matids):
-            for field in agg_fields:
-                try:
-                    new_cols[field].append(id_dict[str(id)][field])
-                except KeyError:
-                    no_data_cols.append(col_num)
-                    break
-        self.logger.info("%d cols dropped due to lack of es data" % len(no_data_cols))
-        self.data.drop(index=self.data.index[no_data_cols], inplace=True)
-        for field in agg_fields:
-            self.data[field] = new_cols[field]
+        es_data = np.array(es_data, dtype=int)
+        es_dataframe = pd.DataFrame(data=es_data, columns=['id', 'advid'] + list(agg_fields.keys()))
+
+        db_dataframe = self.data.set_index('id')
+        # print(es_dataframe.head(), db_dataframe.head())
+        merged_data = es_dataframe.join(db_dataframe, on='id', lsuffix='_db')
+        self.logger.info('Data length before merging: %d\nData length after merging: %d' % (len(db_dataframe), len(merged_data)))
+        self.data = merged_data
+        # print(self.data.index)
+        # for col_num, id in enumerate(matids):
+        #     for field in agg_fields:
+        #         try:
+        #             new_cols[field].append(id_dict[str(id)][field])
+        #         except KeyError:
+        #             no_data_cols.append(col_num)
+        #             break
+        # self.logger.info("%d cols dropped due to lack of es data" % len(no_data_cols))
+        # self.data.drop(index=self.data.index[no_data_cols], inplace=True)
+        # for field in agg_fields:
+        #     self.data[field] = new_cols[field]
 
 
 if __name__ == "__main__":
-    DataParser(data_path='../Data/kuaishou_data_0420.csv', target_file_name='kuaishou_data_0420.csv', es=True, analyze=False, from_db=False)
+    DataParser(data_path='../Data/kuaishou_data_0420.csv', target_file_name='kuaishou_data_0421.csv',
+               es=True, analyze=False, from_db=False, log_level=logging.INFO)
 
 # type WetecMaterialDailyReport struct {
 # 	Id           string    `json:"-"`

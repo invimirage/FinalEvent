@@ -96,10 +96,10 @@ include_cols = [
 threshold = 100
 
 # cpc分桶数量
-bin_number = 3
+bin_number = 2
 
 # bert输入维度
-bert_batch_size = 20
+bert_batch_size = 2
 max_word_number = 500
 
 # 特殊的广告主

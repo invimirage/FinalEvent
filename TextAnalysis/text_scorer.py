@@ -17,7 +17,7 @@ from transformers import BertModel, BertTokenizer, BertConfig
 import pandas as pd
 import numpy as np
 from tqdm import tqdm
-
+import math
 # from torch.utils.data import *
 from basic import DataParser
 import pandas as pd
@@ -64,7 +64,7 @@ class TextScorer:
                 self.data_input_tensor = torch.tensor(self.embed, dtype=torch.float32)
             else:
                 self.data_input_tensor = torch.from_numpy(self.data).to(torch.float32)
-            self.model = DoubleNet(input_length=1024, hidden_length=32, drop_out_rate=0.2).to(
+            self.model = DoubleNet(input_length=1024 + kwargs['extra_feat_len'], hidden_length=32, drop_out_rate=0.4).to(
                 self.device
             )
         else:
@@ -103,7 +103,7 @@ class TextScorer:
         bert_model = BertModel.from_pretrained(bert_path).to(self.device)
         bert_model.eval()
         batch_size = config.bert_batch_size
-        n_batch = len(separated_texts) // batch_size + int(len(separate_points) % batch_size > 0)
+        n_batch = math.ceil(len(separated_texts) / batch_size)
         embeds = []
         for i in range(n_batch):
             if i % 100 == 0:
@@ -153,13 +153,14 @@ class TextScorer:
             self.logger.debug(pooled_output.shape)
             embed = pooled_output.cpu().detach().tolist()
             self.logger.debug(len(embed))
-            embeds.append(embed)
+            embeds.extend(embed)
             torch.cuda.empty_cache()
         return embeds, separate_points
 
     def run_model(self, mode="train", trainning_size=0.8, num_epoch=10, **kwargs):
         self.logger.info("Running model, %s" % mode)
-        input_data = self.data_input_tensor
+        extra_feats = torch.from_numpy(kwargs['extra_features']).to(torch.float32)
+        input_data = torch.cat((self.data_input_tensor[:352639], extra_feats), dim=1)
         tags = self.tag.to(torch.int64)
         assert mode in ["train", "predict"]
         if mode == "train":
@@ -189,16 +190,18 @@ class TextScorer:
             for map_len in map_lens_test:
                 separates_test.append(separates_test[-1] + map_len)
 
-            n_batch = len(train_inds) // self.batch_size + int(len(train_inds) % self.batch_size > 0)
+            n_batch = math.ceil(len(train_inds) / self.batch_size)
             self.logger.debug("Batch number: %d" % n_batch)
+            best_micro_f1 = 0
+            best_epoch = 0
             for epoch in range(num_epoch):
 
                 # if epoch % 10 == 0:
                 #     self.logger.info('Epoch number: %d' % epoch)
 
                 if epoch % 10 == 0:
-                    cpc_pred_train, _ = self.model(train_data.to(self.device), separates=separates_train)
-                    cpc_pred_test, _ = self.model(test_data.to(self.device), separates=separates_test)
+                    cpc_pred_train, train_loss = self.model(train_data.to(self.device), train_tags.to(self.device), separates=separates_train)
+                    cpc_pred_test, test_loss = self.model(test_data.to(self.device), test_tags.to(self.device), separates=separates_test)
                     cpc_pred_worst = (
                         cpc_pred_test.cpu().detach().numpy()[:, 0].flatten()
                     )
@@ -219,6 +222,7 @@ class TextScorer:
                     test_tags_cpu = test_tags.cpu()
                     self.logger.info("------------Epoch %d------------" % epoch)
                     self.logger.info("Training set")
+                    self.logger.info("Loss: %.4lf" % train_loss.cpu().detach())
                     p_class, r_class, f_class, _ = precision_recall_fscore_support(
                         cpc_pred_train, train_tags_cpu
                     )
@@ -226,12 +230,18 @@ class TextScorer:
                     self.logger.info(r_class)
                     self.logger.info(f_class)
                     self.logger.info("Testing set")
+                    self.logger.info("Loss: %.4lf" % test_loss.cpu().detach())
                     p_class, r_class, f_class, _ = precision_recall_fscore_support(
                         cpc_pred_test, test_tags_cpu
                     )
                     self.logger.info(p_class)
                     self.logger.info(r_class)
                     self.logger.info(f_class)
+                    f1_mean = np.mean(f_class)
+                    if f1_mean > best_micro_f1:
+                        best_micro_f1 = f1_mean
+                        best_epoch = epoch
+                    self.logger.info('Best Micro-F1: %.6lf, epoch %d' % (best_micro_f1, best_epoch))
 
                 for i in range(n_batch):
                     start = i * self.batch_size
@@ -256,6 +266,8 @@ class TextScorer:
                     for name, param in self.model.named_parameters():
                         self.logger.debug(param.grad)
                     self.optimizer.step()
+
+                np.random.shuffle(train_inds)
 
                 for name, param in self.model.named_parameters():
                     if name == "fcs.2.bias":
@@ -309,10 +321,9 @@ class TextScorer:
         return vector_embeds
 
 
-def main(data_source, embed_type, log_level):
+def main(data_source: str, embed_type: str, log_level: str, data_path: str = "../Data/kuaishou_data_es.csv") -> None:
     assert data_source in ["raw", "embed"]
     assert embed_type in ["api", "local"]
-    data_path = "../Data/kuaishou_data_es.csv"
     # embed_data = np.load('../Data/vector_embed.npz')
     # dropped_data = embed_data['dropped_ind']
     data = pd.read_csv(data_path)
@@ -348,6 +359,7 @@ def main(data_source, embed_type, log_level):
             lr=1e-2,
             batch_size=1000,
             log_level=log_level,
+            extra_feat_len=1+len(config.advids)
         )
         embed_data = scorer.embed
         sep_points = scorer.separate_points
@@ -360,9 +372,11 @@ def main(data_source, embed_type, log_level):
     else:
         try:
             embed_datafile = np.load("../Data/vector_embed.npz")
+
+            # 以后就不需要转换了应该
             embed_data = np.reshape(embed_datafile['embed'], (-1, embed_datafile['embed'].shape[-1]))
-            sep_points = embed_datafile['sep_points'][:-2]
-            binned_data = binned_data[:-2]
+            sep_points = embed_datafile['sep_points'][:-1]
+            binned_data = binned_data[:-1]
             # print(binned_data.shape, sep_points.shape, embed_data.shape)
             # print(sep_points[-1])
             # print(sep_points[-5:], embed_data.shape)
@@ -374,16 +388,38 @@ def main(data_source, embed_type, log_level):
             data=embed_data,
             tag=binned_data,
             mode=embed_type,
-            lr=1e-2,
-            batch_size=300,
+            lr=1e-3,
+            batch_size=1000,
             log_level=log_level,
+            extra_feat_len=1 + len(config.advids)
         )
         scorer.separate_points = sep_points
     scorer.logger.info(cut_points)
-    scorer.run_model(num_epoch=10000, trainning_size=0.8, ids=id, text=text_data)
+    advid_onehot = []
+    one_hot_len = len(config.advids)
+    for i in range(scorer.data_len):
+        advid = data['advid'][i]
+        sep_len = sep_points[i+1] - sep_points[i]
+        try:
+            idx = config.advids.index(str(advid))
+            one_hot = np.eye(one_hot_len, dtype=int)[idx]
+        except ValueError:
+            one_hot = np.zeros(one_hot_len, dtype=int)
+        for j in range(sep_len):
+            advid_onehot.append(one_hot)
+
+    # 我觉得过一段时间就很难看懂了，不过还是很帅
+    process_mark = np.concatenate(
+        [np.arange(1, 1 + sep_points[i + 1] - sep_points[i]) / (sep_points[i + 1] - sep_points[i])
+         for i in range(len(sep_points) - 1)])
+    process_mark = process_mark.reshape([len(process_mark), -1])
+    extra_features = np.concatenate([advid_onehot, process_mark], axis=1)
+    scorer.run_model(num_epoch=10000, trainning_size=0.8, extra_features=extra_features, ids=id, text=text_data)
 
 
 if __name__ == "__main__":
     # data_source raw embed
     # embed_type local api
-    main(data_source="embed", embed_type="local", log_level=logging.INFO)
+    main(data_source="embed", embed_type="local", log_level=logging.INFO, data_path='../Data/kuaishou_data_0421.csv')
+    # 以后就不需要转换embed了
+

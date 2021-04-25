@@ -14,7 +14,9 @@ import numpy as np
 def bin_tags(tags, binnum):
     # 将数据映射到所需数量的分位数
     tags_binned = pd.qcut(tags, binnum, labels=False)
+    # 按照指定的数值分桶
+    # tags_binned = pd.cut(tags, [0, 0.0032, 1], labels=False)
     # 计算指定分位数点的数据
     large_counts_series = pd.Series(tags)
-    cut_points = large_counts_series.quantile(np.linspace(0, 1, binnum))
+    cut_points = large_counts_series.quantile(np.linspace(0, 1, binnum + 1))
     return tags_binned, cut_points
