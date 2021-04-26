@@ -19,7 +19,7 @@ from matplotlib import pyplot as plt
 
 
 class DataParser:
-    def __init__(self, data_path="../Data/Data", **kwargs):
+    def __init__(self, data_path="Data/Data", **kwargs):
         logging.basicConfig(
             format="%(asctime)s - %(message)s", datefmt="%d-%b-%y %H:%M:%S"
         )
@@ -197,7 +197,7 @@ class DataParser:
             passwd="t0dG18PjAJ8c8EgR",
             database="adwetec_prod",
         )
-
+        self.logger.info('Successfully connected to database')
         # 使用 cursor() 方法创建一个游标对象 cursor
         cursor = db.cursor()
 
@@ -336,8 +336,8 @@ class DataParser:
 
 
 if __name__ == "__main__":
-    DataParser(data_path='../Data/kuaishou_data_0420.csv', target_file_name='kuaishou_data_0421.csv',
-               es=True, analyze=False, from_db=False, log_level=logging.INFO)
+    DataParser(data_path='Data/kuaishou_data_0426.csv', target_file_name='kuaishou_data_0426.csv',
+               es=True, analyze=False, from_db=True, log_level=logging.INFO)
 
 # type WetecMaterialDailyReport struct {
 # 	Id           string    `json:"-"`

@@ -19,7 +19,6 @@ import numpy as np
 from tqdm import tqdm
 import math
 # from torch.utils.data import *
-from basic import DataParser
 import pandas as pd
 import json
 import logging
@@ -33,7 +32,7 @@ from tencentcloud.nlp.v20190408 import nlp_client, models
 from utils import *
 import config
 from matplotlib import pyplot as plt
-from model import *
+from models import *
 from sklearn.metrics import precision_recall_fscore_support
 
 
@@ -53,22 +52,21 @@ class TextScorer:
         self.logger.info("Data length: %d" % self.data_len)
         assert kwargs["mode"] in ["local", "api"]
         # self.mode = kwargs['mode']
-        self.batch_size = kwargs["batch_size"]
         if kwargs["mode"] == "local":
             bert_path = "../Models/Bert/"
             # Do embedding
-            if isinstance(self.data[0], list):
-                self.embed, self.separate_points = self.bert_embedding(
+            if kwargs['do_embed']:
+                self.embed = self.bert_embedding(
                     bert_path, self.data
                 )
-                self.data_input_tensor = torch.tensor(self.embed, dtype=torch.float32)
+                self.data_input = self.embed
             else:
-                self.data_input_tensor = torch.from_numpy(self.data).to(torch.float32)
+                self.data_input = self.data
             self.model = DoubleNet(input_length=1024 + kwargs['extra_feat_len'], hidden_length=32, drop_out_rate=0.4).to(
                 self.device
             )
         else:
-            if isinstance(self.data[0], str):
+            if kwargs['do_embed']:
                 # 如果直接使用tencent API做向量化
                 self.data_input_tensor = torch.from_numpy(
                     self.tencent_embedding(self.data)
@@ -78,20 +76,16 @@ class TextScorer:
             self.model = deal_embed(bert_out_length=768, hidden_length=4)
 
         self.model.to(self.device)
-        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=kwargs["lr"])
 
     def bert_embedding(self, bert_path, text_data):
         tokenizer = BertTokenizer(vocab_file=bert_path + "vocab.txt")  # 初始化分词器
 
         # 如果第一段文本有10小段，则记录为[0, 10]，该list元素数量比tag多1，tag[i]对应文本separate_points[i]:separates[i+1]
-        separate_points = []
         separated_texts = []
         max_text_length = 512
         for slices in text_data:
-            separate_points.append(len(separated_texts))
             for text in slices:
                 separated_texts.append(text)
-        separate_points.append(len(separated_texts))
 
         max_len = max([len(single) for single in separated_texts])  # 最大的句子长度
         self.logger.info("data_size: %d" % len(text_data))
@@ -153,14 +147,32 @@ class TextScorer:
             self.logger.debug(pooled_output.shape)
             embed = pooled_output.cpu().detach().tolist()
             self.logger.debug(len(embed))
-            embeds.extend(embed)
+            embeds.append(embed)
             torch.cuda.empty_cache()
-        return embeds, separate_points
+        return embeds
 
-    def run_model(self, mode="train", trainning_size=0.8, num_epoch=10, **kwargs):
+    def run_model(self, mode="train", trainning_size=0.8, num_epoch=10, batch_size=200, lr=1e-2, **kwargs):
+
+        # 文本数据是分段的，需要构建模型输入数据，即input和seps
+        def build_model_input(text_data, extra_data, indexes):
+            input = []
+            seps = []
+            for data_section_id in indexes:
+                data_section = text_data[data_section_id]
+                extra_feat = extra_data[data_section_id]
+                section_length = len(data_section)
+                seps.append(len(input))
+                for i, single_data in enumerate(data_section):
+                    # 加入分段id
+                    input.append(single_data + extra_feat + [(i + 1) / section_length])
+                seps.append(len(input))
+            return torch.tensor(input, dtype=torch.float32).to(self.device), seps
+
+
         self.logger.info("Running model, %s" % mode)
-        extra_feats = torch.from_numpy(kwargs['extra_features']).to(torch.float32)
-        input_data = torch.cat((self.data_input_tensor[:352639], extra_feats), dim=1)
+        optimizer = torch.optim.Adam(self.model.parameters(), lr=lr)
+        extra_feats = kwargs['extra_features']
+        text_embed_data = self.data_input
         tags = self.tag.to(torch.int64)
         assert mode in ["train", "predict"]
         if mode == "train":
@@ -170,27 +182,16 @@ class TextScorer:
             train_inds = indexes[:train_len]
             self.logger.info('Training data length: %d' % len(train_inds))
             test_inds = indexes[train_len:]
-            self.separate_points = np.array(self.separate_points, dtype=int)
             # 生成的训练、测试数据供测试使用
             # 取训练集的1/10
-            train_inds_select = train_inds[::10]
-            map_to_training = self.separate_points[train_inds_select], self.separate_points[np.array(train_inds_select)+1]
-            train_data = input_data[np.concatenate([np.arange(sta, end) for sta, end in zip(*map_to_training)])]
-            train_tags = tags[train_inds_select]
-            map_lens_train = [end - sta for sta, end in zip(*map_to_training)]
-            separates_train = [0]
-            for map_len in map_lens_train:
-                separates_train.append(separates_train[-1] + map_len)
+            train_inds_select = train_inds[::4]
+            training_sample_input, training_sample_seps = build_model_input(text_embed_data, extra_feats, train_inds_select)
+            training_sample_tags = tags[train_inds_select]
 
-            map_to_testing = self.separate_points[test_inds], self.separate_points[np.array(test_inds)+1]
-            test_data = input_data[np.concatenate([np.arange(sta, end) for sta, end in zip(*map_to_testing)])]
-            test_tags = tags[test_inds]
-            map_lens_test = [end - sta for sta, end in zip(*map_to_testing)]
-            separates_test = [0]
-            for map_len in map_lens_test:
-                separates_test.append(separates_test[-1] + map_len)
+            testing_input, testing_seps = build_model_input(text_embed_data, extra_feats, test_inds)
+            testing_tags = tags[test_inds]
 
-            n_batch = math.ceil(len(train_inds) / self.batch_size)
+            n_batch = math.ceil(len(train_inds) / batch_size)
             self.logger.debug("Batch number: %d" % n_batch)
             best_micro_f1 = 0
             best_epoch = 0
@@ -200,8 +201,8 @@ class TextScorer:
                 #     self.logger.info('Epoch number: %d' % epoch)
 
                 if epoch % 10 == 0:
-                    cpc_pred_train, train_loss = self.model(train_data.to(self.device), train_tags.to(self.device), separates=separates_train)
-                    cpc_pred_test, test_loss = self.model(test_data.to(self.device), test_tags.to(self.device), separates=separates_test)
+                    cpc_pred_train, train_loss = self.model(training_sample_input, training_sample_tags.to(self.device), separates=training_sample_seps)
+                    cpc_pred_test, test_loss = self.model(testing_input, testing_tags.to(self.device), separates=testing_seps)
                     cpc_pred_worst = (
                         cpc_pred_test.cpu().detach().numpy()[:, 0].flatten()
                     )
@@ -218,8 +219,8 @@ class TextScorer:
                         self.logger.info(i)
                     cpc_pred_train = np.argmax(cpc_pred_train.cpu().detach(), axis=1)
                     cpc_pred_test = np.argmax(cpc_pred_test.cpu().detach(), axis=1)
-                    train_tags_cpu = train_tags.cpu()
-                    test_tags_cpu = test_tags.cpu()
+                    train_tags_cpu = training_sample_tags.cpu()
+                    test_tags_cpu = testing_tags.cpu()
                     self.logger.info("------------Epoch %d------------" % epoch)
                     self.logger.info("Training set")
                     self.logger.info("Loss: %.4lf" % train_loss.cpu().detach())
@@ -244,28 +245,23 @@ class TextScorer:
                     self.logger.info('Best Micro-F1: %.6lf, epoch %d' % (best_micro_f1, best_epoch))
 
                 for i in range(n_batch):
-                    start = i * self.batch_size
+                    start = i * batch_size
                     # 别忘了这里用了sigmoid归一化
-                    data_inds = train_inds[start : start + self.batch_size]
+                    data_inds = train_inds[start : start + batch_size]
                     # data_inds = [9871, 21763, 30344, 3806, 7942]
                     # print(data_inds)
-                    map_to_data = self.separate_points[data_inds], self.separate_points[np.array(data_inds) + 1]
-                    map_lens = [end - sta for sta, end in zip(*map_to_data)]
-                    separates = [0]
-                    for map_len in map_lens:
-                        separates.append(separates[-1] + map_len)
                     # print(separates)
-                    data = input_data[np.concatenate([np.arange(sta, end) for sta, end in zip(*map_to_data)])].to(self.device)
+                    data, seps = build_model_input(text_embed_data, extra_feats, data_inds)
                     _tags = tags[data_inds].to(self.device)
                     cpc_pred, loss = self.model(
-                        data, _tags, separates
+                        data, _tags, seps
                     )  # text_hashCodes是一个32-dim文本特征
-                    self.optimizer.zero_grad()
+                    optimizer.zero_grad()
                     self.logger.debug(loss)
                     loss.backward()
                     for name, param in self.model.named_parameters():
                         self.logger.debug(param.grad)
-                    self.optimizer.step()
+                    optimizer.step()
 
                 np.random.shuffle(train_inds)
 
@@ -273,15 +269,17 @@ class TextScorer:
                     if name == "fcs.2.bias":
                         self.logger.debug(name, param)
         else:
-            n_batch = self.data_len // self.batch_size
-            for i in range(n_batch):
-                start = i * self.batch_size
-                # 别忘了这里用了sigmoid归一化
-                cpc_pred = self.model(
-                    input_data[:, start : start + self.batch_size]
-                )  # text_hashCodes是一个32-dim文本特征
+            pass
+            # n_batch = self.data_len // batch_size
+            # for i in range(n_batch):
+            #     start = i * batch_size
+            #     # 别忘了这里用了sigmoid归一化
+            #     cpc_pred = self.model(
+            #         input_data[:, start : start + batch_size]
+            #     )  # text_hashCodes是一个32-dim文本特征
+            #
+            #     loss = F.mse_loss(cpc_pred, tags)
 
-                loss = F.mse_loss(cpc_pred, tags)
 
     def tencent_embedding(self, sentences):
         vector_embeds = []
@@ -356,31 +354,19 @@ def main(data_source: str, embed_type: str, log_level: str, data_path: str = "..
             data=text_data,
             tag=binned_data,
             mode=embed_type,
-            lr=1e-2,
-            batch_size=1000,
             log_level=log_level,
-            extra_feat_len=1+len(config.advids)
+            extra_feat_len=1+len(config.advids),
+            do_embed=True
         )
-        embed_data = scorer.embed
-        sep_points = scorer.separate_points
-        np.savez(
-            "../Data/vector_embed",
-            embed=np.array(embed_data),
-            sep_points=np.array(sep_points),
+        embed_cache = np.array(scorer.embed, dtype=object)
+        np.save(
+            "../Data/vector_embed.npy",
+            embed_cache
         )
 
     else:
         try:
-            embed_datafile = np.load("../Data/vector_embed.npz")
-
-            # 以后就不需要转换了应该
-            embed_data = np.reshape(embed_datafile['embed'], (-1, embed_datafile['embed'].shape[-1]))
-            sep_points = embed_datafile['sep_points'][:-1]
-            binned_data = binned_data[:-1]
-            # print(binned_data.shape, sep_points.shape, embed_data.shape)
-            # print(sep_points[-1])
-            # print(sep_points[-5:], embed_data.shape)
-            embed_data = np.array(embed_data, dtype=float)
+            embed_data = np.load("../Data/vector_embed.npy", allow_pickle=True).tolist()
         except:
             print("Text embedding not found!")
             exit(0)
@@ -388,33 +374,29 @@ def main(data_source: str, embed_type: str, log_level: str, data_path: str = "..
             data=embed_data,
             tag=binned_data,
             mode=embed_type,
-            lr=1e-3,
-            batch_size=1000,
             log_level=log_level,
-            extra_feat_len=1 + len(config.advids)
+            extra_feat_len=1 + len(config.advids),
+            do_embed=False
         )
-        scorer.separate_points = sep_points
     scorer.logger.info(cut_points)
     advid_onehot = []
     one_hot_len = len(config.advids)
     for i in range(scorer.data_len):
         advid = data['advid'][i]
-        sep_len = sep_points[i+1] - sep_points[i]
         try:
             idx = config.advids.index(str(advid))
             one_hot = np.eye(one_hot_len, dtype=int)[idx]
         except ValueError:
             one_hot = np.zeros(one_hot_len, dtype=int)
-        for j in range(sep_len):
-            advid_onehot.append(one_hot)
+        advid_onehot.append(one_hot)
 
     # 我觉得过一段时间就很难看懂了，不过还是很帅
-    process_mark = np.concatenate(
-        [np.arange(1, 1 + sep_points[i + 1] - sep_points[i]) / (sep_points[i + 1] - sep_points[i])
-         for i in range(len(sep_points) - 1)])
-    process_mark = process_mark.reshape([len(process_mark), -1])
-    extra_features = np.concatenate([advid_onehot, process_mark], axis=1)
-    scorer.run_model(num_epoch=10000, trainning_size=0.8, extra_features=extra_features, ids=id, text=text_data)
+    # process_mark = np.concatenate(
+    #     [np.arange(1, 1 + sep_points[i + 1] - sep_points[i]) / (sep_points[i + 1] - sep_points[i])
+    #      for i in range(len(sep_points) - 1)])
+    # process_mark = process_mark.reshape([len(process_mark), -1])
+    # extra_features = np.concatenate([advid_onehot, process_mark], axis=1)
+    scorer.run_model(num_epoch=10000, trainning_size=0.8, extra_features=advid_onehot, batch_size=500, lr=1e-3, ids=id, text=text_data)
 
 
 if __name__ == "__main__":

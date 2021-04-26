@@ -16,6 +16,7 @@ from transformers import BertModel, BertTokenizer, BertConfig
 import pandas as pd
 import numpy as np
 import config
+from efficientnet_pytorch import EfficientNet
 
 
 # ——————构造模型——————
@@ -59,7 +60,7 @@ class DoubleNet(nn.Module):
         )
 
     # seperates [0, 10, 30]递增序列，表示一个文本的分段在batch中的位置
-    def forward(self, data, tag=None, separates=None):
+    def forward(self, data, tag=None, separates:list=None):
         weight_out = self.weight_judger(data)
         # print(1, weight_out)
         quality_out = self.quality_judger(data) * weight_out
@@ -106,6 +107,37 @@ class deal_embed(nn.Module):
             loss = 0
         return out, loss
 
+
+class PictureNet(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.ec_model = EfficientNet.from_name('efficientnet-b4')
+        net_weight = torch.load('../Models/efficientnet-b4/efficientnet-b4-6ed6700e.pth')
+        self.ec_model.load_state_dict(net_weight)
+        grad = False
+        for name, param in self.ec_model.named_parameters():
+            if '_blocks.31' in name:
+                grad = True
+            param.requires_grad = grad
+        feature_num = self.ec_model._fc.in_features
+        self.ec_model._fc = nn.Linear(in_features=feature_num, out_features=config.bin_number, bias=True)
+        # input = torch.randn((1, 3, 255, 255))
+        # print(self.ec_model.extract_features(input).shape)
+        # self.fc =
+
+    def forward(self, input, tag=None):
+        out = self.ec_model(input)
+        # parsed_embed = self.deal_embed(embed).squeeze(-1).squeeze(-1)
+        # out = self.fc(parsed_embed)
+        out_probs = F.softmax(out, dim=1).detach()
+        # print(tag)
+        if tag is not None:
+            criterion = nn.CrossEntropyLoss()
+            loss = criterion(out, tag)
+        else:
+            loss = 0
+        return out_probs, loss
+        # print(output.shape)
 
 if __name__ == "__main__":
     tn = TextNet(128, "Bert/")
