@@ -82,10 +82,12 @@ class TextScorer:
 
         # 如果第一段文本有10小段，则记录为[0, 10]，该list元素数量比tag多1，tag[i]对应文本separate_points[i]:separates[i+1]
         separated_texts = []
+        separated_points = [0]
         max_text_length = 512
         for slices in text_data:
             for text in slices:
                 separated_texts.append(text)
+            separated_points.append(len(separated_texts))
 
         max_len = max([len(single) for single in separated_texts])  # 最大的句子长度
         self.logger.info("data_size: %d" % len(text_data))
@@ -147,9 +149,15 @@ class TextScorer:
             self.logger.debug(pooled_output.shape)
             embed = pooled_output.cpu().detach().tolist()
             self.logger.debug(len(embed))
-            embeds.append(embed)
+            embeds.extend(embed)
             torch.cuda.empty_cache()
-        return embeds
+
+        # 按照文本分割的embedding
+        embeds_per_text = []
+        for i in range(len(separated_points) - 1):
+            embeds_per_text.append(embeds[separated_points[i]:separated_points[i+1]])
+        return embeds_per_text
+
 
     def run_model(self, mode="train", trainning_size=0.8, num_epoch=10, batch_size=200, lr=1e-2, **kwargs):
 
@@ -164,16 +172,18 @@ class TextScorer:
                 seps.append(len(input))
                 for i, single_data in enumerate(data_section):
                     # 加入分段id
-                    input.append(single_data + extra_feat + [(i + 1) / section_length])
-                seps.append(len(input))
+                    input.append(list(single_data) + list(extra_feat) + [(i + 1) / section_length])
+            seps.append(len(input))
             return torch.tensor(input, dtype=torch.float32).to(self.device), seps
 
 
         self.logger.info("Running model, %s" % mode)
+
         optimizer = torch.optim.Adam(self.model.parameters(), lr=lr)
         extra_feats = kwargs['extra_features']
         text_embed_data = self.data_input
         tags = self.tag.to(torch.int64)
+        self.logger.debug('Training data length: %d\n Tag data length: %d' % (len(text_embed_data), self.data_len))
         assert mode in ["train", "predict"]
         if mode == "train":
             indexes = np.arange(self.data_len)
@@ -200,7 +210,7 @@ class TextScorer:
                 # if epoch % 10 == 0:
                 #     self.logger.info('Epoch number: %d' % epoch)
 
-                if epoch % 10 == 0:
+                if epoch % 1 == 0:
                     cpc_pred_train, train_loss = self.model(training_sample_input, training_sample_tags.to(self.device), separates=training_sample_seps)
                     cpc_pred_test, test_loss = self.model(testing_input, testing_tags.to(self.device), separates=testing_seps)
                     cpc_pred_worst = (
@@ -318,6 +328,17 @@ class TextScorer:
         )
         return vector_embeds
 
+def gen_correct_data(text_data, embeds):
+    separated_points = [0]
+    total_len = 0
+    for slices in text_data:
+        total_len += len(slices)
+        separated_points.append(total_len)
+    embeds_flat = sum(embeds, [])
+    embeds_per_text = []
+    for i in range(len(separated_points) - 1):
+        embeds_per_text.append(embeds_flat[separated_points[i]:separated_points[i + 1]])
+    return embeds_per_text
 
 def main(data_source: str, embed_type: str, log_level: str, data_path: str = "../Data/kuaishou_data_es.csv") -> None:
     assert data_source in ["raw", "embed"]
@@ -367,6 +388,7 @@ def main(data_source: str, embed_type: str, log_level: str, data_path: str = "..
     else:
         try:
             embed_data = np.load("../Data/vector_embed.npy", allow_pickle=True).tolist()
+            embed_data = gen_correct_data(text_data, embed_data)
         except:
             print("Text embedding not found!")
             exit(0)
@@ -402,6 +424,6 @@ def main(data_source: str, embed_type: str, log_level: str, data_path: str = "..
 if __name__ == "__main__":
     # data_source raw embed
     # embed_type local api
-    main(data_source="embed", embed_type="local", log_level=logging.INFO, data_path='../Data/kuaishou_data_0421.csv')
+    main(data_source="embed", embed_type="local", log_level=logging.INFO, data_path='../Data/kuaishou_data_0426.csv')
     # 以后就不需要转换embed了
 

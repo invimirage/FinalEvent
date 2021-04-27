@@ -116,8 +116,8 @@ class cover_parser:
             test_inds = indexes[train_len:]
             # 生成的训练、测试数据供测试使用
             # 取训练集的1/10
-            train_inds_select = train_inds[::400]
-            test_inds_select = test_inds[::100]
+            train_inds_select = train_inds[::40]
+            test_inds_select = test_inds[::10]
             train_data = torch.from_numpy(input_data[train_inds_select])
             self.logger.info('Sample length in training set: %d' % train_data.shape[0])
             train_tags = tags[train_inds_select]
@@ -151,7 +151,6 @@ class cover_parser:
                         cpc_pred_train = np.argmax(cpc_pred_train.cpu().detach(), axis=1)
                         cpc_pred_test = np.argmax(cpc_pred_test.cpu().detach(), axis=1)
                         train_tags_cpu = train_tags.cpu()
-                        print(train_tags_cpu)
                         test_tags_cpu = test_tags.cpu()
                         self.logger.info("------------Epoch %d------------" % epoch)
                         self.logger.info("Training set")

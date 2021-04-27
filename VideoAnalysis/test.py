@@ -9,7 +9,9 @@
 """
 from efficientnet_pytorch import EfficientNet
 import numpy as np
-
+a = [1, 2, 1]
+b = [1, 2,  1, 1]
+print(a + b)
 # 补0，这样1月对应日期就是day_in_month[1]
 day_in_month = [0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
 a = [[1, 2,3], [2, 3]]
