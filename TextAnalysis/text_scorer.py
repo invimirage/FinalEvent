@@ -212,7 +212,7 @@ class TextScorer:
 
                 if epoch % 1 == 0:
                     cpc_pred_train, train_loss = self.model(training_sample_input, training_sample_tags.to(self.device), separates=training_sample_seps)
-                    cpc_pred_test, test_loss = self.model(testing_input, testing_tags.to(self.device), separates=testing_seps)
+                    cpc_pred_test, test_loss = self.model(testing_input, testing_tags.to(self.device), separates=testing_seps, detail=True)
                     cpc_pred_worst = (
                         cpc_pred_test.cpu().detach().numpy()[:, 0].flatten()
                     )

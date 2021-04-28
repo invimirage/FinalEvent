@@ -16,29 +16,12 @@ from transformers import BertModel, BertTokenizer, BertConfig
 import pandas as pd
 import numpy as np
 import config
+import json
 from efficientnet_pytorch import EfficientNet
 
 
 # ——————构造模型——————
-# 模型输入为embeding之后的向量
-class TextNet(nn.Module):
-    def __init__(self, hidden_length, bert_path):  # code_length为fc映射到的维度大小
-        super(TextNet, self).__init__()
-        # embedding_dim = self.textExtractor.config.hidden_size
-        self.layers = nn.Sequential(
-            # nn.AdaptiveAvgPool2d(hidden_length),
-            # nn.ReLU(),
-            nn.Linear(hidden_length, config.bin_number),
-        )
 
-    def forward(self, data, tag=None):
-        out = self.layers(data)
-        if tag is not None:
-            criterion = nn.CrossEntropyLoss()
-            loss = criterion(out, tag)
-        else:
-            loss = 0
-        return out, loss
 
 
 class DoubleNet(nn.Module):
@@ -46,21 +29,21 @@ class DoubleNet(nn.Module):
         super(DoubleNet, self).__init__()
         self.quality_judger = nn.Sequential(
             nn.Linear(input_length, hidden_length),
-            nn.Dropout(drop_out_rate),
             nn.ReLU(),
+            nn.Dropout(drop_out_rate),
             nn.Linear(hidden_length, config.bin_number),
         )
         self.weight_judger = nn.Sequential(
             nn.BatchNorm1d(input_length),
             nn.Linear(input_length, hidden_length),
-            nn.Dropout(drop_out_rate),
             nn.ReLU(),
+            nn.Dropout(drop_out_rate),
             nn.Linear(hidden_length, 1),
             nn.Sigmoid(),
         )
 
     # seperates [0, 10, 30]递增序列，表示一个文本的分段在batch中的位置
-    def forward(self, data, tag=None, separates:list=None):
+    def forward(self, data, tag=None, separates:list=None, detail=False):
         weight_out = self.weight_judger(data)
         # print(1, weight_out)
         quality_out = self.quality_judger(data) * weight_out
@@ -73,6 +56,8 @@ class DoubleNet(nn.Module):
             end = separates[i + 1]
             # log_prob = torch.log(quality_out[sta:end] + 1e-20)
             probs = quality_out[sta:end]
+            if detail:
+                print(weight_out[sta:end])
             mean_prob = torch.mean(probs, dim=0, keepdim=True)
             # print(mean_prob.shape)
             output.append(mean_prob)
@@ -107,6 +92,94 @@ class deal_embed(nn.Module):
             loss = 0
         return out, loss
 
+# 模型输入为embeding之后的向量
+class TextNet(nn.Module):
+    def __init__(self, hidden_length, bert_path):  # code_length为fc映射到的维度大小
+        super(TextNet, self).__init__()
+        # embedding_dim = self.textExtractor.config.hidden_size
+        self.layers = nn.Sequential(
+            # nn.AdaptiveAvgPool2d(hidden_length),
+            # nn.ReLU(),
+            nn.Linear(hidden_length, config.bin_number),
+        )
+
+    def forward(self, data, tag=None):
+        out = self.layers(data)
+        if tag is not None:
+            criterion = nn.CrossEntropyLoss()
+            loss = criterion(out, tag)
+        else:
+            loss = 0
+        return out, loss
+
+
+# 模型输入为embeding之后的向量
+class ScorerNet(nn.Module):
+    def __init__(self, bert_path, hidden_length, grad_layer_name='encoder.layer.23.attention.self.query.weight', drop_out_rate=0.2):  # code_length为fc映射到的维度大小
+        super().__init__()
+        # embedding_dim = self.textExtractor.config.hidden_size
+        self.bert_model = BertModel.from_pretrained(bert_path)
+        with open(bert_path + 'config.json') as f:
+            bert_config = json.load(f)
+        bert_out_dim = bert_config['hidden_size']
+        requires_grad = False
+        for name, para in self.bert_model.named_parameters():
+            if name == grad_layer_name:
+                requires_grad = True
+            para.requires_grad = requires_grad
+        self.scorer = nn.Sequential(
+            nn.Linear(bert_out_dim, hidden_length),
+            nn.ReLU(),
+            nn.Dropout(drop_out_rate),
+            nn.Linear(hidden_length, config.bin_number),
+        )
+
+    def forward(self, input):
+        bert_output = self.bert_model(
+            input[0],
+            token_type_ids=input[1],
+            attention_mask=input[2]
+        )
+        last_encode = bert_output[0]
+        scorer_output = self.scorer(last_encode)
+        return scorer_output
+
+
+class JudgeNet(nn.Module):
+    def __init__(self, bert_path, grad_layer_name='encoder.layer.23.attention.self.query.weight', drop_out_rate=0.2):
+        super().__init__()
+        self.bert_model = BertModel.from_pretrained(bert_path)
+        requires_grad = False
+        for name, para in self.bert_model.named_parameters():
+            if name == grad_layer_name:
+                requires_grad = True
+            para.requires_grad = requires_grad
+        with open(bert_path + 'config.json') as f:
+            bert_config = json.load(f)
+        self.judger = nn.Sequential(
+            nn.Linear(bert_config['hidden_size'], 1),
+            nn.Sigmoid()
+        )
+    def forward(self, input, sep_points, labels=None):
+        bert_output = self.bert_model(
+            input[0],
+            token_type_ids=input[1],
+            attention_mask=input[2]
+        )
+        last_encode = bert_output[0]
+        judge_output = self.judger(last_encode).squeeze(-1)
+        slice_scores = []
+        for i in range(len(sep_points)-1):
+            sta = sep_points[i]
+            end = sep_points[i+1]
+            slice_scores.append(torch.mean(judge_output[:,sta:end], dim=1, keepdim=True))
+        slice_scores_tensor = torch.cat(slice_scores, dim=1)
+        if labels is not None:
+            criterion = nn.CrossEntropyLoss()
+            loss = criterion(slice_scores_tensor, labels)
+        else:
+            loss = None
+        return judge_output, loss
 
 class PictureNet(nn.Module):
     def __init__(self):

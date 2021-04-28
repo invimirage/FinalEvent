@@ -6,13 +6,80 @@ import re
 from matplotlib import pyplot as plt
 import torch
 import math
-print(np.array([1, 2, 3])[0, 1])
-logger = logging.getLogger('aa')
-logging.debug('aaa')
-logger.setLevel(logging.DEBUG)
-logger.debug('www')
-print(logger.disabled)
-print('aaa')
+from transformers import BertModel, BertTokenizer, BertConfig
+
+
+a = [1, 2, 3, 2, 1]
+a.sort()
+print(a)
+# test_tensor = torch.FloatTensor([[1, 2, 3], [1, 2, 3]])
+# linear = torch.nn.Linear(3, 1)
+# for param in linear.parameters():
+#     print(param)
+# print(linear(test_tensor))
+
+# bert_model = BertModel.from_pretrained('../Models/Bert')
+# requires_grad = False
+# for name, para in bert_model.named_parameters():
+#     if name == 'encoder.layer.23.attention.self.query.weight':
+#         requires_grad = True
+#     para.requires_grad = requires_grad
+# for name, param in bert_model.named_parameters():
+#     print(name, param.requires_grad)
+#     if name == 'encoder.layer.23.output.dense.weight':
+#         print(param)
+print([1]*4)
+tokenizer = BertTokenizer(vocab_file='../Models/Bert/vocab.txt')  # 初始化分词器
+s = '[SEP]'
+print(tokenizer.convert_tokens_to_ids(s))
+# sentence1 = '我今天吃了馒头，明天吃啥呢？'
+# sentence2 = '我明天想吃玉米'
+# res = tokenizer.encode_plus(sentence1, sentence2)
+# decoded = tokenizer.decode(res['input_ids']).split(' ')
+# for i, j in zip(decoded, res['token_type_ids']):
+#     print(i, j)
+# input = torch.tensor(res['input_ids']).unsqueeze(0)
+# for i in range(len(res['token_type_ids'])):
+#     res['token_type_ids'][i] = 0
+# tokens = torch.tensor(res['token_type_ids']).unsqueeze(0)
+# mask = torch.tensor(res['attention_mask']).unsqueeze(0)
+# # res = tokenizer.decode(res)
+# # res = ['[CLS]'] + res + ['[SEP]']
+# # res = tokenizer.convert_tokens_to_ids(res)
+# # print(res)
+# output = bert_model(input, tokens, mask)[0]
+# linear = torch.nn.Linear(1024, 1)
+# out = linear(output)
+# print(out.shape)
+# print(output[0][0][0])
+# print(output[0][0][15])
+# print(output[0][0][-1])
+#
+#
+# tokenizer = BertTokenizer(vocab_file='../Models/Bert/vocab.txt')  # 初始化分词器
+# sentence1 = '我今天吃了馒头，明天吃啥呢？'
+# sentence2 = '我明天想吃玉米'
+# res = tokenizer.encode_plus(sentence1, sentence2)
+# input = torch.tensor(res['input_ids']).unsqueeze(0)
+# tokens = torch.tensor(res['token_type_ids']).unsqueeze(0)
+# mask = torch.tensor(res['attention_mask']).unsqueeze(0)
+# # res = tokenizer.decode(res)
+# # res = ['[CLS]'] + res + ['[SEP]']
+# # res = tokenizer.convert_tokens_to_ids(res)
+# # print(res)
+# output = bert_model(input, tokens, mask)
+# print(output[0][0][0])
+# print(output[0][0][15])
+# print(output[0][0][-1])
+
+
+# print(np.array([1, 2, 3])[0, 1])
+# logger = logging.getLogger('aa')
+# logging.debug('aaa')
+# logger.setLevel(logging.DEBUG)
+# logger.debug('www')
+# print(logger.disabled)
+# print('aaa')
 # # 2.利用拉马努金公式计算π
 # # doc_k = 1
 # # doc_4k = 1

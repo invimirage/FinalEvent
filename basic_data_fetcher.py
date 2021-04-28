@@ -258,7 +258,7 @@ class DataParser:
         )
         agg_name = "sale_data"
         # 选择要查询的数据
-        agg_fields = {"bclk": "bclk", "pclk": "pclk", "cost": "cost", "clk": "clk"}
+        agg_fields = {"bclk": "bclk", "pclk": "pclk", "cost": "cost", "clk": "clk", 'imp': 'imp'}
         aggs = {}
         for agg_field, target in agg_fields.items():
             aggs[agg_field] = {"sum": {"field": target}}
@@ -336,7 +336,7 @@ class DataParser:
 
 
 if __name__ == "__main__":
-    DataParser(data_path='Data/kuaishou_data_0426.csv', target_file_name='kuaishou_data_0426.csv',
+    DataParser(data_path='Data/kuaishou_data_0428.csv', target_file_name='kuaishou_data_0428.csv',
                es=True, analyze=False, from_db=True, log_level=logging.INFO)
 
 # type WetecMaterialDailyReport struct {
