@@ -271,31 +271,42 @@ class LongTextScorer:
             return slices_select
 
         def get_judger_input(indexes):
-            random_slices = []
-            random_labels = []
-            relevant_slices = []
-            relevant_labels = []
+            # index
+            random_slices_data = {
+                'text_data': [],
+                'labels': [],
+                'seps': []
+            }
+            relevant_slices_data = {
+                'text_data': [],
+                'labels': [],
+                'seps': []
+            }
             for i in indexes:
                 text_data = self.text_data[i]
+                label_data = self.rel_labels[i]
                 random_indexes = choose_slice(text_data, self.parameters['max_text_length'])
-                random_slices.append([text_data[j] for j in random_indexes])
-                random_labels.append([self.rel_labels[i][j]] for j in random_indexes)
+                random_slices_data['text_data'].append(text_data[j] for j in random_indexes)
+                lengths = [len(text_data[j]) for j in random_indexes]
+                random_slices_data['labels'].append([label_data[j]])
+
                 relevant_ones = []
-                relevant_label = []
                 irrelevant_ones = []
+                # 在irrelevant里随机选的index是irrelevant_ones的index，需要map
+                irrelevant_matches = []
                 total_len = 0
                 for j, rele in enumerate(self.rel_labels[i]):
                     if rele == 1:
-                        relevant_ones.append(text_data[j])
-                        total_len += len(relevant_ones[-1])
-                        relevant_label.append(1)
+                        relevant_ones.append(j)
+                        total_len += len(text_data[j])
                     else:
                         irrelevant_ones.append(text_data[j])
-                relevant_indexes = choose_slice(irrelevant_ones, self.parameters['max_text_length'] - total_len)
-                relevant_ones += [text_data[j] for j in relevant_indexes]
-                relevant_label += [0] * len(relevant_indexes)
+                        irrelevant_matches.append(j)
+                irrelevant_indexes = choose_slice(irrelevant_ones, self.parameters['max_text_length'] - total_len)
+                irrelevant_indexes = [irrelevant_matches[idx] for idx in irrelevant_indexes]
+                relevant_ones += irrelevant_indexes
+                relevant_ones.sort()
                 relevant_slices.append(relevant_ones)
-                relevant_labels.append(relevant_label)
             cls = 101
             sep = 102
             random_slices = [slice + [sep] for slice in random_slices]
