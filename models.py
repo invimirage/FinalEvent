@@ -73,6 +73,33 @@ class DoubleNet(nn.Module):
             loss = 0
         return out_probs, loss
 
+class SeparatedLSTM(nn.Module):
+    def __init__(self, input_length, hidden_length, extra_length, layer_number, linear_hidden_length, drop_out_rate):
+        super().__init__()
+        self.input_length = input_length
+        self.hidden_length = hidden_length
+        self.lstm_layer_number = layer_number
+        self.lstm = nn.LSTM(input_size=input_length, hidden_size=hidden_length, num_layers=layer_number, batch_first=True, dropout=drop_out_rate)
+        self.fc = nn.Sequential(
+            nn.Linear(hidden_length*layer_number+extra_length, linear_hidden_length),
+            nn.ReLU(),
+            nn.Dropout(drop_out_rate),
+            nn.Linear(linear_hidden_length, config.bin_number),
+        )
+
+    # seperates [0, 10, 30]递增序列，表示一个文本的分段在batch中的位置
+    def forward(self, text_data, extra_data, tag=None, detail=False):
+        lstm_out, (hn, cn) = self.lstm(text_data)
+        fc_input = torch.cat((hn.view(hn.shape[0], -1), extra_data), dim=1)
+        output = self.fc(fc_input)
+        out_probs = F.softmax(output, dim=1).detach()
+        # print(tag)
+        if tag is not None:
+            criterion = nn.CrossEntropyLoss()
+            loss = criterion(output, tag)
+        else:
+            loss = 0
+        return out_probs, loss
 
 class deal_embed(nn.Module):
     def __init__(self, bert_out_length, hidden_length):  # code_length为fc映射到的维度大小

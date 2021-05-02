@@ -22,6 +22,7 @@ import math
 import pandas as pd
 import json
 import logging
+import torch.nn.utils.rnn as rnn
 from tencentcloud.common import credential
 from tencentcloud.common.profile.client_profile import ClientProfile
 from tencentcloud.common.profile.http_profile import HttpProfile
@@ -62,9 +63,10 @@ class TextScorer:
                 self.data_input = self.embed
             else:
                 self.data_input = self.data
-            self.model = DoubleNet(input_length=1024 + kwargs['extra_feat_len'], hidden_length=32, drop_out_rate=0.4).to(
-                self.device
-            )
+            self.model = kwargs['model']
+            # self.model = DoubleNet(input_length=1024 + kwargs['extra_feat_len'], hidden_length=32, drop_out_rate=0.4).to(
+            #         self.device
+            # self.model = SeparatedLSTM(input_length=1024 + kwargs['extra_feat_len'], hidden_length=128, layer_number=2, linear_hidden_length=32).to(self.device)
         else:
             if kwargs['do_embed']:
                 # 如果直接使用tencent API做向量化
@@ -289,6 +291,259 @@ class TextScorer:
             #     )  # text_hashCodes是一个32-dim文本特征
             #
             #     loss = F.mse_loss(cpc_pred, tags)
+
+
+    def run_model_separated_lstm(self, mode="train", trainning_size=0.8, num_epoch=10, batch_size=200, lr=1e-2, **kwargs):
+
+        # 文本数据是分段的，需要构建模型输入数据，即input和seps
+        def feed_model(text_data, extra_data, tag_data, indexes):
+            input = []
+            lengths = []
+            extra = []
+            for data_section_id in indexes:
+                data_section = text_data[data_section_id]
+                extra_feat = extra_data[data_section_id]
+                extra.append(extra_feat)
+                input.append(torch.tensor(data_section, dtype=torch.float32))
+                lengths.append(len(data_section))
+            input_padded = rnn.pad_sequence(input, batch_first=True)
+            self.logger.debug('padded {}'.format(input_padded))
+            _input_packed = rnn.pack_padded_sequence(input_padded, lengths=lengths, batch_first=True, enforce_sorted=False).to(self.device)
+            _tag_data = tag_data[indexes].to(self.device)
+            _extra_data = torch.tensor(extra_data, dtype=torch.float32).to(self.device)
+            pred, loss = self.model(
+                _input_packed, _extra_data, _tag_data
+            )
+            return pred, loss, _tag_data
+
+
+        self.logger.info("Running model, %s" % mode)
+
+        optimizer = torch.optim.Adam(self.model.parameters(), lr=lr)
+        extra_feats = kwargs['extra_features']
+        text_embed_data = self.data_input
+        tags = self.tag.to(torch.int64)
+        self.logger.debug('Training data length: %d\n Tag data length: %d' % (len(text_embed_data), self.data_len))
+        assert mode in ["train", "predict"]
+        if mode == "train":
+            indexes = np.arange(self.data_len)
+            np.random.shuffle(indexes)
+            train_len = round(self.data_len * trainning_size)
+            train_inds = indexes[:train_len]
+            self.logger.info('Training data length: %d' % len(train_inds))
+            test_inds = indexes[train_len:]
+            # 生成的训练、测试数据供测试使用
+            # 取训练集的1/10
+            train_inds_select = train_inds[::4]
+            # training_sample_input, training_sample_extra, training_sample_tags = build_model_input(text_embed_data, extra_feats, tags, train_inds_select)
+            #
+            # testing_input, testing_extra, testing_tags = build_model_input(text_embed_data, extra_feats, tags, test_inds)
+
+            n_batch = math.ceil(len(train_inds) / batch_size)
+            self.logger.debug("Batch number: %d" % n_batch)
+            best_micro_f1 = 0
+            best_epoch = 0
+            for epoch in range(num_epoch):
+
+                # if epoch % 10 == 0:
+                #     self.logger.info('Epoch number: %d' % epoch)
+
+                if epoch % 1 == 0:
+                    cpc_pred_train, train_loss, training_sample_tags = feed_model(text_embed_data, extra_feats, tags, train_inds_select)
+                    cpc_pred_test, test_loss, testing_tags = feed_model(text_embed_data, extra_feats, tags, test_inds)
+                    cpc_pred_worst = (
+                        cpc_pred_test.cpu().detach().numpy()[:, 0].flatten()
+                    )
+                    top10 = np.array(cpc_pred_worst).argsort()[::-1][0:10]
+                    self.logger.info("Worst Top 10: {}".format(kwargs["ids"][top10]))
+                    for i in kwargs["text"][top10]:
+                        self.logger.info(i)
+                    cpc_pred_best = (
+                        cpc_pred_test.cpu().detach().numpy()[:, -1].flatten()
+                    )
+                    top10 = np.array(cpc_pred_best).argsort()[::-1][0:10]
+                    self.logger.info("Best Top 10: {}".format(kwargs["ids"][top10]))
+                    for i in kwargs["text"][top10]:
+                        self.logger.info(i)
+                    cpc_pred_train = np.argmax(cpc_pred_train.cpu().detach(), axis=1)
+                    cpc_pred_test = np.argmax(cpc_pred_test.cpu().detach(), axis=1)
+                    train_tags_cpu = training_sample_tags.cpu()
+                    test_tags_cpu = testing_tags.cpu()
+                    self.logger.info("------------Epoch %d------------" % epoch)
+                    self.logger.info("Training set")
+                    self.logger.info("Loss: %.4lf" % train_loss.cpu().detach())
+                    p_class, r_class, f_class, _ = precision_recall_fscore_support(
+                        cpc_pred_train, train_tags_cpu
+                    )
+                    self.logger.info(p_class)
+                    self.logger.info(r_class)
+                    self.logger.info(f_class)
+                    self.logger.info("Testing set")
+                    self.logger.info("Loss: %.4lf" % test_loss.cpu().detach())
+                    p_class, r_class, f_class, _ = precision_recall_fscore_support(
+                        cpc_pred_test, test_tags_cpu
+                    )
+                    self.logger.info(p_class)
+                    self.logger.info(r_class)
+                    self.logger.info(f_class)
+                    f1_mean = np.mean(f_class)
+                    if f1_mean > best_micro_f1:
+                        best_micro_f1 = f1_mean
+                        best_epoch = epoch
+                    self.logger.info('Best Micro-F1: %.6lf, epoch %d' % (best_micro_f1, best_epoch))
+
+                for i in range(n_batch):
+                    start = i * batch_size
+                    # 别忘了这里用了sigmoid归一化
+                    data_inds = train_inds[start : start + batch_size]
+                    # data_inds = [9871, 21763, 30344, 3806, 7942]
+                    # print(data_inds)
+                    # print(separates)
+                    cpc_pred, loss, _ = feed_model(
+                        text_embed_data, extra_feats, tags, data_inds
+                    )  # text_hashCodes是一个32-dim文本特征
+                    optimizer.zero_grad()
+                    self.logger.debug(loss)
+                    loss.backward()
+                    for name, param in self.model.named_parameters():
+                        self.logger.debug(param.grad)
+                    optimizer.step()
+
+                np.random.shuffle(train_inds)
+
+                for name, param in self.model.named_parameters():
+                    if name == "fcs.2.bias":
+                        self.logger.debug(name, param)
+        else:
+            pass
+            # n_batch = self.data_len // batch_size
+            # for i in range(n_batch):
+
+
+    def run_model_with_bert(self, bert_path, mode="train", trainning_size=0.8, num_epoch=10, batch_size=200, lr=1e-2, **kwargs):
+
+        # 文本数据是分段的，需要构建模型输入数据，即input和seps
+        def build_bert_input(text_data, max_text_length=100):
+            tokens, segments, input_masks = [], [], []
+            tokenizer = BertTokenizer(vocab_file=bert_path + "vocab.txt")  # 初始化分词器
+            for text in text_data:
+                indexed_tokens = tokenizer.encode(text)  # 索引列表
+                if len(indexed_tokens) > max_text_length:
+                    indexed_tokens = indexed_tokens[:max_text_length//2] + indexed_tokens[-max_text_length//2:]
+                tokens.append(indexed_tokens)
+                segments.append([0] * len(indexed_tokens))
+                input_masks.append([1] * len(indexed_tokens))
+            for j in range(len(tokens)):
+                padding = [0] * (max_text_length - len(tokens[j]))
+                tokens[j] += padding
+                segments[j] += padding
+                input_masks[j] += padding
+            return tokens, segments, input_masks
+
+
+        self.logger.info("Running model, %s" % mode)
+
+        optimizer = torch.optim.Adam(self.model.parameters(), lr=lr)
+        extra_feats = kwargs['extra_features']
+        text_data = self.data_input
+        tags = self.tag.to(torch.int64)
+        self.logger.debug('Training data length: %d\n Tag data length: %d' % (len(text_data), self.data_len))
+        assert mode in ["train", "predict"]
+        if mode == "train":
+            indexes = np.arange(self.data_len)
+            np.random.shuffle(indexes)
+            train_len = round(self.data_len * trainning_size)
+            train_inds = indexes[:train_len]
+            self.logger.info('Training data length: %d' % len(train_inds))
+            test_inds = indexes[train_len:]
+            # 生成的训练、测试数据供测试使用
+            # 取训练集的1/10
+            train_inds_select = train_inds[::4]
+            training_sample_input, training_sample_seps = build_model_input(text_embed_data, extra_feats, train_inds_select)
+            training_sample_tags = tags[train_inds_select]
+
+            testing_input, testing_seps = build_model_input(text_embed_data, extra_feats, test_inds)
+            testing_tags = tags[test_inds]
+
+            n_batch = math.ceil(len(train_inds) / batch_size)
+            self.logger.debug("Batch number: %d" % n_batch)
+            best_micro_f1 = 0
+            best_epoch = 0
+            for epoch in range(num_epoch):
+
+                # if epoch % 10 == 0:
+                #     self.logger.info('Epoch number: %d' % epoch)
+
+                if epoch % 1 == 0:
+                    cpc_pred_train, train_loss = self.model(training_sample_input, training_sample_tags.to(self.device), separates=training_sample_seps)
+                    cpc_pred_test, test_loss = self.model(testing_input, testing_tags.to(self.device), separates=testing_seps, detail=True)
+                    cpc_pred_worst = (
+                        cpc_pred_test.cpu().detach().numpy()[:, 0].flatten()
+                    )
+                    top10 = np.array(cpc_pred_worst).argsort()[::-1][0:10]
+                    self.logger.info("Worst Top 10: {}".format(kwargs["ids"][top10]))
+                    for i in kwargs["text"][top10]:
+                        self.logger.info(i)
+                    cpc_pred_best = (
+                        cpc_pred_test.cpu().detach().numpy()[:, -1].flatten()
+                    )
+                    top10 = np.array(cpc_pred_best).argsort()[::-1][0:10]
+                    self.logger.info("Best Top 10: {}".format(kwargs["ids"][top10]))
+                    for i in kwargs["text"][top10]:
+                        self.logger.info(i)
+                    cpc_pred_train = np.argmax(cpc_pred_train.cpu().detach(), axis=1)
+                    cpc_pred_test = np.argmax(cpc_pred_test.cpu().detach(), axis=1)
+                    train_tags_cpu = training_sample_tags.cpu()
+                    test_tags_cpu = testing_tags.cpu()
+                    self.logger.info("------------Epoch %d------------" % epoch)
+                    self.logger.info("Training set")
+                    self.logger.info("Loss: %.4lf" % train_loss.cpu().detach())
+                    p_class, r_class, f_class, _ = precision_recall_fscore_support(
+                        cpc_pred_train, train_tags_cpu
+                    )
+                    self.logger.info(p_class)
+                    self.logger.info(r_class)
+                    self.logger.info(f_class)
+                    self.logger.info("Testing set")
+                    self.logger.info("Loss: %.4lf" % test_loss.cpu().detach())
+                    p_class, r_class, f_class, _ = precision_recall_fscore_support(
+                        cpc_pred_test, test_tags_cpu
+                    )
+                    self.logger.info(p_class)
+                    self.logger.info(r_class)
+                    self.logger.info(f_class)
+                    f1_mean = np.mean(f_class)
+                    if f1_mean > best_micro_f1:
+                        best_micro_f1 = f1_mean
+                        best_epoch = epoch
+                    self.logger.info('Best Micro-F1: %.6lf, epoch %d' % (best_micro_f1, best_epoch))
+
+                for i in range(n_batch):
+                    start = i * batch_size
+                    # 别忘了这里用了sigmoid归一化
+                    data_inds = train_inds[start : start + batch_size]
+                    # data_inds = [9871, 21763, 30344, 3806, 7942]
+                    # print(data_inds)
+                    # print(separates)
+                    data, seps = build_model_input(text_embed_data, extra_feats, data_inds)
+                    _tags = tags[data_inds].to(self.device)
+                    cpc_pred, loss = self.model(
+                        data, _tags, seps
+                    )  # text_hashCodes是一个32-dim文本特征
+                    optimizer.zero_grad()
+                    self.logger.debug(loss)
+                    loss.backward()
+                    for name, param in self.model.named_parameters():
+                        self.logger.debug(param.grad)
+                    optimizer.step()
+
+                np.random.shuffle(train_inds)
+
+                for name, param in self.model.named_parameters():
+                    if name == "fcs.2.bias":
+                        self.logger.debug(name, param)
+        else:
+            pass
 
 
     def tencent_embedding(self, sentences):
