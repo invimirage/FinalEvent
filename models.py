@@ -89,29 +89,30 @@ class BertWithCNN(nn.Module):
                 requires_grad = True
             para.requires_grad = requires_grad
         self.pooler = nn.Sequential(
-            nn.Conv2d(in_channels=1, out_channels=channels, kernel_size=10),
+            nn.Conv2d(in_channels=1, out_channels=channels, kernel_size=(10, 10)),
             nn.ReLU(),
             nn.Dropout(drop_out_rate),
             nn.AdaptiveAvgPool2d(hidden_length),
         )
         self.fcs = nn.Sequential(
-            nn.Linear(hidden_length + extra_length, linear_hidden_length),
+            nn.Linear(hidden_length ** 2 * channels + extra_length, linear_hidden_length),
             nn.ReLU(),
             nn.Dropout(drop_out_rate),
             nn.Linear(linear_hidden_length, config.bin_number),
         )
 
     def forward(self, input, extra_data, tag=None, detail=False):
+        batch_size = extra_data.shape[0]
         bert_output = self.bert_model(
             input[0],
             token_type_ids=input[1],
             attention_mask=input[2]
         )
-        last_encode = bert_output[0]
-        pooler_output = self.pooler(last_encode)
+        last_encode = bert_output[0].unsqueeze(1)
+        pooler_output = self.pooler(last_encode).view(batch_size, -1)
         fc_input = torch.cat((pooler_output, extra_data), dim=1)
         output = self.fcs(fc_input)
-        out_probs = F.softmax(output, dim=1).detach()
+        out_probs = F.softmax(output, dim=1).cpu().detach()
         # print(tag)
         if tag is not None:
             criterion = nn.CrossEntropyLoss()

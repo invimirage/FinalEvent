@@ -9,8 +9,13 @@ import math
 from transformers import BertModel, BertTokenizer, BertConfig
 import torch.nn.utils.rnn as rnn
 
-a = [torch.tensor([1, 2]), torch.tensor([1, 2, 3])]
-print(torch.cat(a, dim=0))
+train_inds = [1, 2, 3 ,4 ,5]
+trainning_size = 0.8
+print(int(trainning_size // (1 - trainning_size)))
+train_inds_sample = train_inds[::int(trainning_size // (1 - trainning_size))]
+print(train_inds_sample)
+# a = [torch.tensor([1, 2]), torch.tensor([1, 2, 3])]
+# print(torch.cat(a, dim=0))
 # a = [torch.tensor([[1, 2, 3], [3, 4, 5]]), torch.tensor([[4, 5, 6]])]
 # a = rnn.pad_sequence(a, batch_first=True).to(torch.float32)
 # b = rnn.pack_padded_sequence(a, [2, 1], batch_first=True)

@@ -449,7 +449,7 @@ class TextScorer:
                 extra.append(extra_data[data_section_id])
             _tag_data = tag_data[indexes].to(self.device)
             _extra_data = torch.tensor(extra, dtype=torch.float32).to(self.device)
-            input = [torch.tensor(data, dtype=torch.float32, device=self.device) for data in input]
+            input = [torch.tensor(data, device=self.device) for data in input]
             if train:
                 pred, loss = self.model(
                     input, _extra_data, _tag_data
@@ -471,7 +471,7 @@ class TextScorer:
 
         optimizer = torch.optim.Adam(self.model.parameters(), lr=lr)
         extra_feats = kwargs['extra_features']
-        text_data = self.data_input
+        text_data = kwargs['text']
         bert_input = build_bert_input(text_data)
         tags = self.tag.to(torch.int64)
         self.logger.debug('Training data length: %d\n Tag data length: %d' % (len(text_data), self.data_len))
@@ -483,7 +483,7 @@ class TextScorer:
             train_inds = indexes[:train_len]
             self.logger.info('Training data length: %d' % len(train_inds))
             test_inds = indexes[train_len:]
-            train_inds_sample = train_inds[::(trainning_size // (1 - trainning_size))]
+            train_inds_sample = train_inds[::int(trainning_size // (1 - trainning_size))]
             # 生成的训练、测试数据供测试使用
             # 取训练集的1/10
             # train_inds_select = train_inds[::4]
@@ -671,7 +671,8 @@ def main(data_source: str, embed_type: str, log_level: str, data_path: str = "..
 
     binned_data, cut_points = bin_tags(tag_data, config.bin_number)
     text_data = data["separated_text"].apply(lambda text: json.loads(text))
-    training_model = SeparatedLSTM(1024, 128, len(config.advids), 3, 32, 0.5)
+    # training_model = SeparatedLSTM(1024, 128, len(config.advids), 3, 32, 0.5)
+    training_model = BertWithCNN(bert_path='../Models/Bert/', hidden_length=16, linear_hidden_length=32, extra_length=len(config.advids), channels=3)
 
     if data_source == "raw":
         scorer = TextScorer(
@@ -725,8 +726,10 @@ def main(data_source: str, embed_type: str, log_level: str, data_path: str = "..
     # extra_features = np.concatenate([advid_onehot, process_mark], axis=1)
 
     # scorer.run_model(num_epoch=10000, trainning_size=0.8, extra_features=advid_onehot, batch_size=500, lr=1e-3, ids=id, text=text_data)
-    scorer.run_model_separated_lstm(num_epoch=10000, trainning_size=0.8, extra_features=advid_onehot, batch_size=800, lr=1e-3, ids=id,
-                     text=text_data)
+    scorer.run_model_with_bert(bert_path='../Models/Bert/', num_epoch=10000, trainning_size=0.8,
+                               extra_features=advid_onehot, batch_size=50, lr=1e-3, ids=id, text=text_data)
+    # scorer.run_model_separated_lstm(num_epoch=10000, trainning_size=0.8, extra_features=advid_onehot, batch_size=800, lr=1e-3, ids=id,
+    #                  text=text_data)
 
 
 if __name__ == "__main__":
