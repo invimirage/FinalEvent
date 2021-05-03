@@ -310,7 +310,7 @@ class TextScorer:
             self.logger.debug('padded {}'.format(input_padded))
             _input_packed = rnn.pack_padded_sequence(input_padded, lengths=lengths, batch_first=True, enforce_sorted=False).to(self.device)
             _tag_data = tag_data[indexes].to(self.device)
-            _extra_data = torch.tensor(extra_data, dtype=torch.float32).to(self.device)
+            _extra_data = torch.tensor(extra, dtype=torch.float32).to(self.device)
             pred, loss = self.model(
                 _input_packed, _extra_data, _tag_data
             )
@@ -440,12 +440,39 @@ class TextScorer:
                 input_masks[j] += padding
             return tokens, segments, input_masks
 
+        def feed_model(bert_input, extra_data, tag_data, indexes, train=True):
+            input = [[], [], []]
+            extra = []
+            for data_section_id in indexes:
+                for i in range(3):
+                    input[i].append(bert_input[i][data_section_id])
+                extra.append(extra_data[data_section_id])
+            _tag_data = tag_data[indexes].to(self.device)
+            _extra_data = torch.tensor(extra, dtype=torch.float32).to(self.device)
+            input = [torch.tensor(data, dtype=torch.float32, device=self.device) for data in input]
+            if train:
+                pred, loss = self.model(
+                    input, _extra_data, _tag_data
+                )
+                return pred, loss
+            else:
+                self.model.eval()
+                with torch.no_grad():
+                    pred, loss = self.model(
+                        input, _extra_data, _tag_data
+                    )
+                    loss = loss.cpu().detach()
+                self.model.train()
+                return pred, loss
+
+
 
         self.logger.info("Running model, %s" % mode)
 
         optimizer = torch.optim.Adam(self.model.parameters(), lr=lr)
         extra_feats = kwargs['extra_features']
         text_data = self.data_input
+        bert_input = build_bert_input(text_data)
         tags = self.tag.to(torch.int64)
         self.logger.debug('Training data length: %d\n Tag data length: %d' % (len(text_data), self.data_len))
         assert mode in ["train", "predict"]
@@ -456,14 +483,15 @@ class TextScorer:
             train_inds = indexes[:train_len]
             self.logger.info('Training data length: %d' % len(train_inds))
             test_inds = indexes[train_len:]
+            train_inds_sample = train_inds[::(trainning_size // (1 - trainning_size))]
             # 生成的训练、测试数据供测试使用
             # 取训练集的1/10
-            train_inds_select = train_inds[::4]
-            training_sample_input, training_sample_seps = build_model_input(text_embed_data, extra_feats, train_inds_select)
-            training_sample_tags = tags[train_inds_select]
-
-            testing_input, testing_seps = build_model_input(text_embed_data, extra_feats, test_inds)
-            testing_tags = tags[test_inds]
+            # train_inds_select = train_inds[::4]
+            # training_sample_input, training_sample_seps = build_model_input(text_embed_data, extra_feats, train_inds_select)
+            # training_sample_tags = tags[train_inds_select]
+            #
+            # testing_input, testing_seps = build_model_input(text_embed_data, extra_feats, test_inds)
+            # testing_tags = tags[test_inds]
 
             n_batch = math.ceil(len(train_inds) / batch_size)
             self.logger.debug("Batch number: %d" % n_batch)
@@ -475,8 +503,28 @@ class TextScorer:
                 #     self.logger.info('Epoch number: %d' % epoch)
 
                 if epoch % 1 == 0:
-                    cpc_pred_train, train_loss = self.model(training_sample_input, training_sample_tags.to(self.device), separates=training_sample_seps)
-                    cpc_pred_test, test_loss = self.model(testing_input, testing_tags.to(self.device), separates=testing_seps, detail=True)
+                    train_batch_number = math.ceil(len(train_inds_sample) / batch_size)
+                    training_preds = []
+                    training_losses = []
+                    testing_preds = []
+                    testing_losses = []
+                    test_batch_number = math.ceil(len(test_inds) / batch_size)
+                    for batch in range(train_batch_number):
+                        sta = batch * batch_size
+                        end = sta + batch_size
+                        pred, loss = feed_model(bert_input, extra_feats, tags, train_inds_sample[sta:end], False)
+                        training_preds.append(pred)
+                        training_losses.append(loss.unsqueeze(0))
+                    cpc_pred_train = torch.cat(training_preds, dim=0)
+                    train_loss = torch.mean(torch.cat(training_losses, dim=0))
+                    for batch in range(test_batch_number):
+                        sta = batch * batch_size
+                        end = sta + batch_size
+                        pred, loss = feed_model(bert_input, extra_feats, tags, test_inds[sta:end], False)
+                        testing_preds.append(pred)
+                        testing_losses.append(loss.unsqueeze(0))
+                    cpc_pred_test = torch.cat(testing_preds, dim=0)
+                    test_loss = torch.mean(torch.cat(testing_losses, dim=0))
                     cpc_pred_worst = (
                         cpc_pred_test.cpu().detach().numpy()[:, 0].flatten()
                     )
@@ -491,13 +539,13 @@ class TextScorer:
                     self.logger.info("Best Top 10: {}".format(kwargs["ids"][top10]))
                     for i in kwargs["text"][top10]:
                         self.logger.info(i)
-                    cpc_pred_train = np.argmax(cpc_pred_train.cpu().detach(), axis=1)
-                    cpc_pred_test = np.argmax(cpc_pred_test.cpu().detach(), axis=1)
-                    train_tags_cpu = training_sample_tags.cpu()
-                    test_tags_cpu = testing_tags.cpu()
+                    cpc_pred_train = np.argmax(cpc_pred_train, axis=1)
+                    cpc_pred_test = np.argmax(cpc_pred_test, axis=1)
+                    train_tags_cpu = tags[train_inds_sample]
+                    test_tags_cpu = tags[test_inds]
                     self.logger.info("------------Epoch %d------------" % epoch)
                     self.logger.info("Training set")
-                    self.logger.info("Loss: %.4lf" % train_loss.cpu().detach())
+                    self.logger.info("Loss: %.4lf" % train_loss)
                     p_class, r_class, f_class, _ = precision_recall_fscore_support(
                         cpc_pred_train, train_tags_cpu
                     )
@@ -505,7 +553,7 @@ class TextScorer:
                     self.logger.info(r_class)
                     self.logger.info(f_class)
                     self.logger.info("Testing set")
-                    self.logger.info("Loss: %.4lf" % test_loss.cpu().detach())
+                    self.logger.info("Loss: %.4lf" % test_loss)
                     p_class, r_class, f_class, _ = precision_recall_fscore_support(
                         cpc_pred_test, test_tags_cpu
                     )
@@ -525,10 +573,9 @@ class TextScorer:
                     # data_inds = [9871, 21763, 30344, 3806, 7942]
                     # print(data_inds)
                     # print(separates)
-                    data, seps = build_model_input(text_embed_data, extra_feats, data_inds)
                     _tags = tags[data_inds].to(self.device)
-                    cpc_pred, loss = self.model(
-                        data, _tags, seps
+                    cpc_pred, loss = feed_model(
+                        bert_input, extra_feats, tags, data_inds
                     )  # text_hashCodes是一个32-dim文本特征
                     optimizer.zero_grad()
                     self.logger.debug(loss)
@@ -624,6 +671,7 @@ def main(data_source: str, embed_type: str, log_level: str, data_path: str = "..
 
     binned_data, cut_points = bin_tags(tag_data, config.bin_number)
     text_data = data["separated_text"].apply(lambda text: json.loads(text))
+    training_model = SeparatedLSTM(1024, 128, len(config.advids), 3, 32, 0.5)
 
     if data_source == "raw":
         scorer = TextScorer(
@@ -632,7 +680,8 @@ def main(data_source: str, embed_type: str, log_level: str, data_path: str = "..
             mode=embed_type,
             log_level=log_level,
             extra_feat_len=1+len(config.advids),
-            do_embed=True
+            do_embed=True,
+            model=training_model
         )
         embed_cache = np.array(scorer.embed, dtype=object)
         np.save(
@@ -653,7 +702,8 @@ def main(data_source: str, embed_type: str, log_level: str, data_path: str = "..
             mode=embed_type,
             log_level=log_level,
             extra_feat_len=1 + len(config.advids),
-            do_embed=False
+            do_embed=False,
+            model=training_model
         )
     scorer.logger.info(cut_points)
     advid_onehot = []
@@ -673,7 +723,10 @@ def main(data_source: str, embed_type: str, log_level: str, data_path: str = "..
     #      for i in range(len(sep_points) - 1)])
     # process_mark = process_mark.reshape([len(process_mark), -1])
     # extra_features = np.concatenate([advid_onehot, process_mark], axis=1)
-    scorer.run_model(num_epoch=10000, trainning_size=0.8, extra_features=advid_onehot, batch_size=500, lr=1e-3, ids=id, text=text_data)
+
+    # scorer.run_model(num_epoch=10000, trainning_size=0.8, extra_features=advid_onehot, batch_size=500, lr=1e-3, ids=id, text=text_data)
+    scorer.run_model_separated_lstm(num_epoch=10000, trainning_size=0.8, extra_features=advid_onehot, batch_size=800, lr=1e-3, ids=id,
+                     text=text_data)
 
 
 if __name__ == "__main__":

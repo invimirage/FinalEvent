@@ -7,11 +7,18 @@ from matplotlib import pyplot as plt
 import torch
 import math
 from transformers import BertModel, BertTokenizer, BertConfig
+import torch.nn.utils.rnn as rnn
 
-
-a = [1, 2, 3, 2, 1]
-a.sort()
-print(a)
+a = [torch.tensor([1, 2]), torch.tensor([1, 2, 3])]
+print(torch.cat(a, dim=0))
+# a = [torch.tensor([[1, 2, 3], [3, 4, 5]]), torch.tensor([[4, 5, 6]])]
+# a = rnn.pad_sequence(a, batch_first=True).to(torch.float32)
+# b = rnn.pack_padded_sequence(a, [2, 1], batch_first=True)
+# lstm = torch.nn.LSTM(input_size=3, hidden_size=2, num_layers=4, batch_first=True, dropout=0.1)
+# print(a)
+# print(b)
+# out, (hn, cn) = lstm(b, batch_first=True)
+# print(out, hn.shape, cn.shape)
 # test_tensor = torch.FloatTensor([[1, 2, 3], [1, 2, 3]])
 # linear = torch.nn.Linear(3, 1)
 # for param in linear.parameters():

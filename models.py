@@ -17,6 +17,7 @@ import pandas as pd
 import numpy as np
 import config
 import json
+import os
 from efficientnet_pytorch import EfficientNet
 
 
@@ -73,6 +74,52 @@ class DoubleNet(nn.Module):
             loss = 0
         return out_probs, loss
 
+class BertWithCNN(nn.Module):
+    def __init__(self, bert_path, hidden_length, extra_length, linear_hidden_length, channels,
+                 grad_layer_name='encoder.layer.23.attention.self.query.weight', drop_out_rate=0.2):  # code_length为fc映射到的维度大小
+        super().__init__()
+        # embedding_dim = self.textExtractor.config.hidden_size
+        self.bert_model = BertModel.from_pretrained(bert_path)
+        with open(bert_path + 'config.json') as f:
+            bert_config = json.load(f)
+        bert_out_dim = bert_config['hidden_size']
+        requires_grad = False
+        for name, para in self.bert_model.named_parameters():
+            if name == grad_layer_name:
+                requires_grad = True
+            para.requires_grad = requires_grad
+        self.pooler = nn.Sequential(
+            nn.Conv2d(in_channels=1, out_channels=channels, kernel_size=10),
+            nn.ReLU(),
+            nn.Dropout(drop_out_rate),
+            nn.AdaptiveAvgPool2d(hidden_length),
+        )
+        self.fcs = nn.Sequential(
+            nn.Linear(hidden_length + extra_length, linear_hidden_length),
+            nn.ReLU(),
+            nn.Dropout(drop_out_rate),
+            nn.Linear(linear_hidden_length, config.bin_number),
+        )
+
+    def forward(self, input, extra_data, tag=None, detail=False):
+        bert_output = self.bert_model(
+            input[0],
+            token_type_ids=input[1],
+            attention_mask=input[2]
+        )
+        last_encode = bert_output[0]
+        pooler_output = self.pooler(last_encode)
+        fc_input = torch.cat((pooler_output, extra_data), dim=1)
+        output = self.fcs(fc_input)
+        out_probs = F.softmax(output, dim=1).detach()
+        # print(tag)
+        if tag is not None:
+            criterion = nn.CrossEntropyLoss()
+            loss = criterion(output, tag)
+        else:
+            loss = 0
+        return out_probs, loss
+
 class SeparatedLSTM(nn.Module):
     def __init__(self, input_length, hidden_length, extra_length, layer_number, linear_hidden_length, drop_out_rate):
         super().__init__()
@@ -89,8 +136,10 @@ class SeparatedLSTM(nn.Module):
 
     # seperates [0, 10, 30]递增序列，表示一个文本的分段在batch中的位置
     def forward(self, text_data, extra_data, tag=None, detail=False):
+        # print(text_data)
         lstm_out, (hn, cn) = self.lstm(text_data)
-        fc_input = torch.cat((hn.view(hn.shape[0], -1), extra_data), dim=1)
+        hn_batch_first = torch.transpose(hn, 0, 1).contiguous()
+        fc_input = torch.cat((hn_batch_first.view(hn_batch_first.shape[0], -1), extra_data), dim=1)
         output = self.fc(fc_input)
         out_probs = F.softmax(output, dim=1).detach()
         # print(tag)

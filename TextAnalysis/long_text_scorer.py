@@ -271,6 +271,8 @@ class LongTextScorer:
             return slices_select
 
         def get_judger_input(indexes):
+            cls = 101
+            sep = 102
             # index
             random_slices_data = {
                 'text_data': [],
@@ -286,7 +288,8 @@ class LongTextScorer:
                 text_data = self.text_data[i]
                 label_data = self.rel_labels[i]
                 random_indexes = choose_slice(text_data, self.parameters['max_text_length'])
-                random_slices_data['text_data'].append(text_data[j] for j in random_indexes)
+                text_data_random = [cls] + sum([text_data[j] + [sep] for j in random_indexes], [])
+                random_slices_data['text_data'].append()
                 lengths = [len(text_data[j]) for j in random_indexes]
                 random_slices_data['labels'].append([label_data[j]])
 
