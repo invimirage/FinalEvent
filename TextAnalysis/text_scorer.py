@@ -648,19 +648,35 @@ def main(data_source: str, embed_type: str, log_level: str, data_path: str = "..
     # embed_data = np.load('../Data/vector_embed.npz')
     # dropped_data = embed_data['dropped_ind']
     data = pd.read_csv(data_path)
+    advid_avg_bctr = pd.read_csv('../Data/bctr_avg.csv')
+    advid_avg_bctr.set_index('advid', inplace=True)
+    advid_avg_bctr = advid_avg_bctr.to_dict(orient='index')
     # data.drop(index=data.index[dropped_data]
     imp = np.array(data["clk"])
     beh = np.array(data["bclk"])
     id = np.array(data["id"])
+    advids = data['advid']
+
 
     datalen = len(data)
+    removed_indexes = []
+    tag_data = []
     for i in range(datalen):
-        if imp[i] < config.threshold:
-            beh[i] = 0
-        # 避免分母为0
-        if imp[i] == 0:
-            imp[i] = 1
-    tag_data = beh / imp
+        advid = advids[i]
+        if advid_avg_bctr[advid]['count'] < 10:
+            removed_indexes.append(i)
+            continue
+        else:
+            mean, std = advid_avg_bctr[advid]['bctr'], advid_avg_bctr[advid]['std']
+            tag_data.append((imp[i] / (beh[i] + 1e-10) - mean) / std)
+        # if imp[i] < config.threshold:
+        #     beh[i] = 0
+        # # 避免分母为0
+        # if imp[i] == 0:
+        #     imp[i] = 1
+    # tag_data = beh / imp
+    tag_data = np.array(tag_data)
+
     # # print(tag_data.mean(), tag_data.max(), tag_data.min())
     # # plt.hist(tag_data, 10, range=(0, 0.2), facecolor="blue", edgecolor="black", alpha=0.7)
     # # plt.show()
@@ -671,8 +687,8 @@ def main(data_source: str, embed_type: str, log_level: str, data_path: str = "..
 
     binned_data, cut_points = bin_tags(tag_data, config.bin_number)
     text_data = data["separated_text"].apply(lambda text: json.loads(text))
-    # training_model = SeparatedLSTM(1024, 128, len(config.advids), 3, 32, 0.5)
-    training_model = BertWithCNN(bert_path='../Models/Bert/', hidden_length=16, linear_hidden_length=32, extra_length=len(config.advids), channels=3)
+    training_model = SeparatedLSTM(1024, 128, len(config.advids), 3, 32, 0.5)
+    # training_model = BertWithCNN(bert_path='../Models/Bert/', hidden_length=16, linear_hidden_length=32, extra_length=len(config.advids), channels=3)
 
     if data_source == "raw":
         scorer = TextScorer(
@@ -694,6 +710,7 @@ def main(data_source: str, embed_type: str, log_level: str, data_path: str = "..
         try:
             embed_data = np.load("../Data/vector_embed.npy", allow_pickle=True).tolist()
             embed_data = gen_correct_data(text_data, embed_data)
+            embed_data = [embed_data[i] for i in range(len(embed_data)) if i not in removed_indexes]
         except:
             print("Text embedding not found!")
             exit(0)
@@ -726,10 +743,10 @@ def main(data_source: str, embed_type: str, log_level: str, data_path: str = "..
     # extra_features = np.concatenate([advid_onehot, process_mark], axis=1)
 
     # scorer.run_model(num_epoch=10000, trainning_size=0.8, extra_features=advid_onehot, batch_size=500, lr=1e-3, ids=id, text=text_data)
-    scorer.run_model_with_bert(bert_path='../Models/Bert/', num_epoch=10000, trainning_size=0.8,
-                               extra_features=advid_onehot, batch_size=50, lr=1e-3, ids=id, text=text_data)
-    # scorer.run_model_separated_lstm(num_epoch=10000, trainning_size=0.8, extra_features=advid_onehot, batch_size=800, lr=1e-3, ids=id,
-    #                  text=text_data)
+    # scorer.run_model_with_bert(bert_path='../Models/Bert/', num_epoch=10000, trainning_size=0.8,
+    #                            extra_features=advid_onehot, batch_size=50, lr=1e-3, ids=id, text=text_data)
+    scorer.run_model_separated_lstm(num_epoch=10000, trainning_size=0.8, extra_features=advid_onehot, batch_size=400, lr=1e-4, ids=id,
+                     text=text_data)
 
 
 if __name__ == "__main__":

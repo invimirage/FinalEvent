@@ -18,7 +18,7 @@ import re
 from matplotlib import pyplot as plt
 
 
-class DataParser:
+class DataFetcher:
     def __init__(self, data_path="Data/Data", **kwargs):
         logging.basicConfig(
             format="%(asctime)s - %(message)s", datefmt="%d-%b-%y %H:%M:%S"
@@ -334,9 +334,8 @@ class DataParser:
         # for field in agg_fields:
         #     self.data[field] = new_cols[field]
 
-
 if __name__ == "__main__":
-    DataParser(data_path='Data/kuaishou_data_0428.csv', target_file_name='kuaishou_data_0428.csv',
+    DataFetcher(data_path='Data/kuaishou_data_0428.csv', target_file_name='kuaishou_data_0428.csv',
                es=True, analyze=False, from_db=True, log_level=logging.INFO)
 
 # type WetecMaterialDailyReport struct {
