@@ -14,18 +14,16 @@ from elasticsearch import Elasticsearch
 import json
 import config
 import pymysql
+import os
 import re
 from matplotlib import pyplot as plt
+from utils import *
 
 
 class DataFetcher:
     def __init__(self, data_path="Data/Data", **kwargs):
-        logging.basicConfig(
-            format="%(asctime)s - %(message)s", datefmt="%d-%b-%y %H:%M:%S"
-        )
-        self.logger = logging.getLogger("Logger")
-        self.logger.setLevel(kwargs['log_level'])
-        self.data_folder = "/".join(data_path.split("/")[:-1]) + "/"
+        self.logger = init_logger(kwargs['log_level'])
+        self.data_folder = config.data_folder
         self.logger.debug("folder : %s" % self.data_folder)
         if kwargs["from_db"]:
             data = self.get_data_from_db()
@@ -111,83 +109,8 @@ class DataFetcher:
         if kwargs["es"]:
             # 目前只搞快手
             self.get_es_data(kuaishou_data["id"])
-            self.data.to_csv(self.data_folder + kwargs['target_file_name'])
 
-        self.seperate_text()
-        self.data.to_csv(self.data_folder + kwargs['target_file_name'])
-
-    def seperate_text(self):
-        data = self.data
-        # text_data = data["full_texts"]
-        raw_data = data["audio_text"]
-        ids = data["id"]
-        seperated_len = []
-        seps = []
-        seperated_text = []
-        sum = 0
-        for raw, id in zip(raw_data, ids):
-            sentences = []
-            raw = json.loads(raw)
-            words_with_time = []
-            for res_detail in raw["Response"]["Data"]["ResultDetail"]:
-                words_with_time.extend(res_detail["Words"])
-            word_num = len(words_with_time)
-            sentence = ""
-            for i in range(word_num):
-                sta = words_with_time[i]["OffsetStartMs"]
-                end = words_with_time[i]["OffsetEndMs"]
-                word = words_with_time[i]["Word"]
-                if i < word_num - 1:
-                    next_sta = words_with_time[i + 1]["OffsetStartMs"]
-                else:
-                    next_sta = 0
-                sentence += word
-                # 考虑分句
-                if int(next_sta) - int(end) > 20 or word in ["，", "。"]:
-                    # 必分，查看长度
-                    if i == word_num - 1 or word == "。":
-                        # 长度太短，嫩加就加到上一句
-                        if len(sentence) <= 10 and len(sentences) > 0:
-                            sentences[-1] += sentence
-                        else:
-                            sentences.append(sentence)
-                        sentence = ""
-
-                    # 不是必分，长度够了才分
-                    if len(sentence) > 10:
-                        sentences.append(sentence)
-                        sentence = ""
-
-            for sep in sentences:
-                if len(sep) > 50:
-                    sum += 1
-                    # print(sep, id)
-                    # print(raw)
-                seperated_len.append(len(sep))
-            seps.append(len(sentences))
-            seperated_text.append(json.dumps(sentences))
-            # if len(sentences) == 0:
-            #     print(id, text, raw)
-            # if len(text) > 50:
-            #     print(text)
-        seperated_len = np.array(seperated_len)
-        seps = np.array(seps)
-        self.logger.info("Super long text slice number: %d" % sum)
-        self.logger.info(
-            "Slice length, min %d, mean %.2lf, max %d"
-            % (seperated_len.min(), seperated_len.mean(), seperated_len.max())
-        )
-        self.logger.info(
-            "Slice number, min %d, mean %.2lf, max %d"
-            % (seps.min(), seps.mean(), seps.max())
-        )
-        self.data["separated_text"] = seperated_text
-        # fig, subs = plt.subplots(2, 1)
-        # subs[0].hist(seps, bins=10)
-        #
-        # subs[1].hist(seperated_len, bins=10)
-        #
-        # plt.show()
+        self.data.to_csv(os.path.join(self.data_folder, kwargs['target_file_name']))
 
     def get_data_from_db(self):
         # 打开数据库连接
@@ -258,7 +181,8 @@ class DataFetcher:
         )
         agg_name = "sale_data"
         # 选择要查询的数据
-        agg_fields = {"bclk": "bclk", "pclk": "pclk", "cost": "cost", "clk": "clk", 'imp': 'imp'}
+        agg_fields = {"bclk": "bclk", "pclk": "pclk", "cost": "cost", "clk": "clk", 'imp': 'imp',
+        "follow": "follow", "cancelfollow": "cancelfollow", "report": "report", "block": "block", "negative": "negative", "paly3s": "play3s"}
         aggs = {}
         for agg_field, target in agg_fields.items():
             aggs[agg_field] = {"sum": {"field": target}}
@@ -285,7 +209,7 @@ class DataFetcher:
                                 "script": {
                                     "source": "doc['date'].value.toInstant().toEpochMilli() - "
                                               "doc['vtime'].value.toInstant().toEpochMilli() <= params.aMonth",
-                                    "params": {"aMonth": 2592000000},
+                                    "params": {"aMonth": 2592000000, "aWeek": 604800000},
                                 }
                             }
                         },
@@ -335,8 +259,13 @@ class DataFetcher:
         #     self.data[field] = new_cols[field]
 
 if __name__ == "__main__":
-    DataFetcher(data_path='Data/kuaishou_data_0428.csv', target_file_name='kuaishou_data_0428.csv',
-               es=True, analyze=False, from_db=True, log_level=logging.INFO)
+    data_folder = config.data_folder
+    if not os.path.exists(data_folder):
+        os.makedirs(data_folder)
+    # 一般来说，这个文件不需要存储两次，其区别仅仅是是否包含了es中的数据
+    data_path = os.path.join(data_folder, config.raw_data_file)
+    DataFetcher(data_path=data_path, target_file_name=config.raw_data_file,
+               es=True, analyze=False, from_db=False, log_level=logging.INFO)
 
 # type WetecMaterialDailyReport struct {
 # 	Id           string    `json:"-"`

@@ -9,7 +9,7 @@
 """
 import pandas as pd
 import numpy as np
-
+import logging
 
 def bin_tags(tags, binnum):
     # 将数据映射到所需数量的分位数
@@ -20,3 +20,11 @@ def bin_tags(tags, binnum):
     large_counts_series = pd.Series(tags)
     cut_points = large_counts_series.quantile(np.linspace(0, 1, binnum + 1))
     return tags_binned, cut_points
+
+def init_logger(log_level):
+    logging.basicConfig(
+        format="%(asctime)s - %(message)s", datefmt="%d-%b-%y %H:%M:%S"
+    )
+    logger = logging.getLogger("Logger")
+    logger.setLevel(log_level)
+    return logger

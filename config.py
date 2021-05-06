@@ -7,6 +7,16 @@
 @time: 2021/4/9 16:19
 @github: local 16351726fa15c85f565b7d5fecdf320ea67a72ef
 """
+import os
+
+
+this_path = os.path.realpath(__file__)
+this_folder = os.path.split(this_path)[0]
+data_folder = os.path.join(this_folder, "Data", "kuaishou_data_0426")
+raw_data_file = os.path.join(data_folder, "data.csv")
+grouped_data_file = os.path.join(data_folder, 'grouped.csv')
+embed_data_file = os.path.join(data_folder, "vector_embed.npy")
+bert_path = os.path.join(this_folder, 'Models', 'Bert')
 
 all_cols = [
     "id",
@@ -94,6 +104,9 @@ include_cols = [
 ]
 # 素材展现量阈值
 threshold = 100
+
+# 广告主素材量阈值
+advid_threshold = 10
 
 # cpc分桶数量
 bin_number = 2

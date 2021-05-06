@@ -35,7 +35,7 @@ import config
 from matplotlib import pyplot as plt
 from models import *
 from sklearn.metrics import precision_recall_fscore_support
-
+import os
 
 class TextScorer:
     def __init__(self, **kwargs):
@@ -334,7 +334,7 @@ class TextScorer:
             test_inds = indexes[train_len:]
             # 生成的训练、测试数据供测试使用
             # 取训练集的1/10
-            train_inds_select = train_inds[::4]
+            train_inds_select = train_inds[::int(trainning_size // (1 - trainning_size))]
             # training_sample_input, training_sample_extra, training_sample_tags = build_model_input(text_embed_data, extra_feats, tags, train_inds_select)
             #
             # testing_input, testing_extra, testing_tags = build_model_input(text_embed_data, extra_feats, tags, test_inds)
@@ -642,40 +642,42 @@ def gen_correct_data(text_data, embeds):
         embeds_per_text.append(embeds_flat[separated_points[i]:separated_points[i + 1]])
     return embeds_per_text
 
-def main(data_source: str, embed_type: str, log_level: str, data_path: str = "../Data/kuaishou_data_es.csv") -> None:
+def main(data_source: str, embed_type: str, log_level: str) -> None:
     assert data_source in ["raw", "embed"]
     assert embed_type in ["api", "local"]
     # embed_data = np.load('../Data/vector_embed.npz')
     # dropped_data = embed_data['dropped_ind']
-    data = pd.read_csv(data_path)
-    advid_avg_bctr = pd.read_csv('../Data/bctr_avg.csv')
-    advid_avg_bctr.set_index('advid', inplace=True)
-    advid_avg_bctr = advid_avg_bctr.to_dict(orient='index')
-    # data.drop(index=data.index[dropped_data]
-    imp = np.array(data["clk"])
-    beh = np.array(data["bclk"])
+    print(config.raw_data_file)
+    data = pd.read_csv(config.raw_data_file, usecols=['id', 'bctr_tag', 'separated_text', 'advid'])
+    tag_data = np.array(data['bctr_tag'])
+    # advid_avg_bctr = pd.read_csv('Data/kuaishou_data_0426/bctr_avg.csv')
+    # advid_avg_bctr.set_index('advid', inplace=True)
+    # advid_avg_bctr = advid_avg_bctr.to_dict(orient='index')
+    # # data.drop(index=data.index[dropped_data]
+    # imp = np.array(data["clk"])
+    # beh = np.array(data["bclk"])
     id = np.array(data["id"])
-    advids = data['advid']
-
-
-    datalen = len(data)
-    removed_indexes = []
-    tag_data = []
-    for i in range(datalen):
-        advid = advids[i]
-        if advid_avg_bctr[advid]['count'] < 10:
-            removed_indexes.append(i)
-            continue
-        else:
-            mean, std = advid_avg_bctr[advid]['bctr'], advid_avg_bctr[advid]['std']
-            tag_data.append((imp[i] / (beh[i] + 1e-10) - mean) / std)
-        # if imp[i] < config.threshold:
-        #     beh[i] = 0
-        # # 避免分母为0
-        # if imp[i] == 0:
-        #     imp[i] = 1
-    # tag_data = beh / imp
-    tag_data = np.array(tag_data)
+    # advids = data['advid']
+    #
+    #
+    # datalen = len(data)
+    # removed_indexes = []
+    # tag_data = []
+    # for i in range(datalen):
+    #     advid = advids[i]
+    #     if advid_avg_bctr[advid]['count'] < 10:
+    #         removed_indexes.append(i)
+    #         continue
+    #     else:
+    #         mean, std = advid_avg_bctr[advid]['bctr'], advid_avg_bctr[advid]['std']
+    #         tag_data.append((imp[i] / (beh[i] + 1e-10) - mean) / std)
+    #     # if imp[i] < config.threshold:
+    #     #     beh[i] = 0
+    #     # # 避免分母为0
+    #     # if imp[i] == 0:
+    #     #     imp[i] = 1
+    # # tag_data = beh / imp
+    # tag_data = np.array(tag_data)
 
     # # print(tag_data.mean(), tag_data.max(), tag_data.min())
     # # plt.hist(tag_data, 10, range=(0, 0.2), facecolor="blue", edgecolor="black", alpha=0.7)
@@ -702,15 +704,15 @@ def main(data_source: str, embed_type: str, log_level: str, data_path: str = "..
         )
         embed_cache = np.array(scorer.embed, dtype=object)
         np.save(
-            "../Data/vector_embed.npy",
+            os.path.join(config.data_folder, config.embed_data_file),
             embed_cache
         )
 
     else:
         try:
-            embed_data = np.load("../Data/vector_embed.npy", allow_pickle=True).tolist()
+            embed_data = np.load(config.embed_data_file, allow_pickle=True).tolist()
             embed_data = gen_correct_data(text_data, embed_data)
-            embed_data = [embed_data[i] for i in range(len(embed_data)) if i not in removed_indexes]
+            # embed_data = [embed_data[i] for i in range(len(embed_data)) if i not in removed_indexes]
         except:
             print("Text embedding not found!")
             exit(0)
@@ -745,13 +747,13 @@ def main(data_source: str, embed_type: str, log_level: str, data_path: str = "..
     # scorer.run_model(num_epoch=10000, trainning_size=0.8, extra_features=advid_onehot, batch_size=500, lr=1e-3, ids=id, text=text_data)
     # scorer.run_model_with_bert(bert_path='../Models/Bert/', num_epoch=10000, trainning_size=0.8,
     #                            extra_features=advid_onehot, batch_size=50, lr=1e-3, ids=id, text=text_data)
-    scorer.run_model_separated_lstm(num_epoch=10000, trainning_size=0.8, extra_features=advid_onehot, batch_size=400, lr=1e-4, ids=id,
-                     text=text_data)
+    scorer.run_model_separated_lstm(num_epoch=10000, trainning_size=0.9, extra_features=advid_onehot, batch_size=400,
+                                    lr=1e-4, ids=id, text=text_data)
 
 
 if __name__ == "__main__":
     # data_source raw embed
     # embed_type local api
-    main(data_source="embed", embed_type="local", log_level=logging.INFO, data_path='../Data/kuaishou_data_0426.csv')
+    main(data_source="embed", embed_type="local", log_level=logging.INFO)
     # 以后就不需要转换embed了
 

@@ -28,6 +28,7 @@ from efficientnet_pytorch import EfficientNet
 class DoubleNet(nn.Module):
     def __init__(self, input_length, hidden_length, drop_out_rate):
         super(DoubleNet, self).__init__()
+        self.name = 'DoubleNet'
         self.quality_judger = nn.Sequential(
             nn.Linear(input_length, hidden_length),
             nn.ReLU(),
@@ -78,6 +79,7 @@ class BertWithCNN(nn.Module):
     def __init__(self, bert_path, hidden_length, extra_length, linear_hidden_length, channels,
                  grad_layer_name='encoder.layer.23.attention.self.query.weight', drop_out_rate=0.2):  # code_length为fc映射到的维度大小
         super().__init__()
+        self.name = 'BertWithCNN'
         # embedding_dim = self.textExtractor.config.hidden_size
         self.bert_model = BertModel.from_pretrained(bert_path)
         with open(bert_path + 'config.json') as f:
@@ -124,6 +126,7 @@ class BertWithCNN(nn.Module):
 class SeparatedLSTM(nn.Module):
     def __init__(self, input_length, hidden_length, extra_length, layer_number, linear_hidden_length, drop_out_rate):
         super().__init__()
+        self.name = 'SeparatedLSTM'
         self.input_length = input_length
         self.hidden_length = hidden_length
         self.lstm_layer_number = layer_number
@@ -261,6 +264,7 @@ class JudgeNet(nn.Module):
 class PictureNet(nn.Module):
     def __init__(self):
         super().__init__()
+        self.name = 'PictureNet'
         self.ec_model = EfficientNet.from_name('efficientnet-b4')
         net_weight = torch.load('../Models/efficientnet-b4/efficientnet-b4-6ed6700e.pth')
         self.ec_model.load_state_dict(net_weight)
