@@ -9,11 +9,15 @@ import math
 from transformers import BertModel, BertTokenizer, BertConfig
 import torch.nn.utils.rnn as rnn
 
-train_inds = [1, 2, 3 ,4 ,5]
-trainning_size = 0.8
-print(int(trainning_size // (1 - trainning_size)))
-train_inds_sample = train_inds[::int(trainning_size // (1 - trainning_size))]
-print(train_inds_sample)
+
+
+print(lrs)
+# d = {'1':1}
+# train_inds = [1, 2, 3 ,4 ,5]
+# trainning_size = 0.8
+# print(int(trainning_size // (1 - trainning_size)))
+# train_inds_sample = train_inds[::int(trainning_size // (1 - trainning_size))]
+# print(train_inds_sample)
 # a = [torch.tensor([1, 2]), torch.tensor([1, 2, 3])]
 # print(torch.cat(a, dim=0))
 # a = [torch.tensor([[1, 2, 3], [3, 4, 5]]), torch.tensor([[4, 5, 6]])]

@@ -30,7 +30,7 @@ class DataHandler:
         data = self.data
         datalen = len(data)
         imp = np.array(data["clk"])
-        beh = np.array(data["bclk"])
+        beh = np.array(data["like"])
 
         for i in range(datalen):
             if imp[i] < config.threshold:
@@ -39,7 +39,7 @@ class DataHandler:
             if imp[i] == 0:
                 imp[i] = 1
         tag_data = beh / imp
-        data['bctr'] = tag_data
+        data['like_rate'] = tag_data
         self.data = data
 
     def seperate_text(self):
@@ -115,9 +115,9 @@ class DataHandler:
         #
         # plt.show()
 
-    def cal_bctr_avg(self, img):
+    def cal_bctr_avg(self, img=False):
         data = self.data
-        bctr_avg = data.groupby(['advid'], as_index=True)['bctr'].agg(['mean', 'std', 'count'])
+        bctr_avg = data.groupby(['advid'], as_index=True)['like_rate'].agg(['mean', 'std', 'count'])
         bctr_avg = pd.DataFrame(bctr_avg)
         bctr_avg.to_csv(config.grouped_data_file)
         advid_bctr_dict = bctr_avg.to_dict(orient='index')
@@ -133,15 +133,15 @@ class DataHandler:
             if grouped_data['count'] < config.advid_threshold:
                 removed_rows.append(i)
             else:
-                bctr = data['bctr'][i]
+                bctr = data['like_rate'][i]
                 bctr_mean = grouped_data['mean']
                 bctr_std = grouped_data['std']
                 advid_mean.append(bctr_mean)
                 advid_std.append(bctr_std)
-                bctr_tag.append((bctr - bctr_mean) / bctr_std)
+                bctr_tag.append((bctr - bctr_mean) / (bctr_std + 1e-10))
         self.logger.info('%d data dropped due to advertiser cold start' % len(removed_rows))
         self.data.drop(index=self.data.index[removed_rows], inplace=True)
-        self.data['bctr_tag'] = bctr_tag
+        self.data['like_tag'] = bctr_tag
         self.data['bctr_mean'] = bctr_mean
         self.data['bctr_std'] = bctr_std
 
@@ -165,7 +165,7 @@ class DataHandler:
 
 if __name__ == '__main__':
     data_handler = DataHandler(os.path.join(config.data_folder, config.raw_data_file))
-    data_handler.seperate_text()
-    data_handler.cal_bctr_avg(img=False)
+    # data_handler.seperate_text()
+    data_handler.cal_bctr_avg()
     data_handler.store_data()
     # data_handler.relations_bctr_imp(img=False)

@@ -23,7 +23,12 @@ from efficientnet_pytorch import EfficientNet
 
 # ——————构造模型——————
 
-
+class MyModule(nn.Module):
+    def __init__(self, name, requires_embed, hyperparams):
+        super(MyModule, self).__init__()
+        self.name = name
+        self.requires_embed = requires_embed
+        self.hyperparams = hyperparams
 
 class DoubleNet(nn.Module):
     def __init__(self, input_length, hidden_length, drop_out_rate):
@@ -75,11 +80,14 @@ class DoubleNet(nn.Module):
             loss = 0
         return out_probs, loss
 
-class BertWithCNN(nn.Module):
-    def __init__(self, bert_path, hidden_length, extra_length, linear_hidden_length, channels,
-                 grad_layer_name='encoder.layer.23.attention.self.query.weight', drop_out_rate=0.2):  # code_length为fc映射到的维度大小
-        super().__init__()
-        self.name = 'BertWithCNN'
+class BertWithCNN(MyModule):
+    def __init__(self, bert_path, extra_length, hyperparams):  # code_length为fc映射到的维度大小
+        super().__init__("BertWithCNN", False, hyperparams)
+        hidden_length = hyperparams["hidden_length"]
+        linear_hidden_length = hyperparams["linear_hidden_length"]
+        grad_layer_name = hyperparams["grad_layer_name"]
+        channels = hyperparams['channels']
+        drop_out_rate = hyperparams['drop_out_rate']
         # embedding_dim = self.textExtractor.config.hidden_size
         self.bert_model = BertModel.from_pretrained(bert_path)
         with open(bert_path + 'config.json') as f:
@@ -112,7 +120,8 @@ class BertWithCNN(nn.Module):
         )
         last_encode = bert_output[0].unsqueeze(1)
         pooler_output = self.pooler(last_encode).view(batch_size, -1)
-        fc_input = torch.cat((pooler_output, extra_data), dim=1)
+        # fc_input = torch.cat((pooler_output, extra_data), dim=1)
+        fc_input = pooler_output
         output = self.fcs(fc_input)
         out_probs = F.softmax(output, dim=1).cpu().detach()
         # print(tag)
@@ -123,14 +132,16 @@ class BertWithCNN(nn.Module):
             loss = 0
         return out_probs, loss
 
-class SeparatedLSTM(nn.Module):
-    def __init__(self, input_length, hidden_length, extra_length, layer_number, linear_hidden_length, drop_out_rate):
-        super().__init__()
-        self.name = 'SeparatedLSTM'
-        self.input_length = input_length
-        self.hidden_length = hidden_length
-        self.lstm_layer_number = layer_number
-        self.lstm = nn.LSTM(input_size=input_length, hidden_size=hidden_length, num_layers=layer_number, batch_first=True, dropout=drop_out_rate)
+class SeparatedLSTM(MyModule):
+    def __init__(self, input_length, extra_length, hyperparams):
+        super().__init__('SeparatedLSTM', True, hyperparams)
+        input_length = input_length
+        hidden_length = hyperparams['hidden_length']
+        layer_number = hyperparams['layer_number']
+        linear_hidden_length = hyperparams['hidden_length']
+        drop_out_rate = hyperparams['drop_out_rate']
+        self.lstm = nn.LSTM(input_size=input_length, hidden_size=hyperparams['hidden_length'], num_layers=hyperparams['layer_number'],
+                            batch_first=True, dropout=hyperparams['drop_out_rate'])
         self.fc = nn.Sequential(
             nn.Linear(hidden_length*layer_number+extra_length, linear_hidden_length),
             nn.ReLU(),
@@ -143,7 +154,8 @@ class SeparatedLSTM(nn.Module):
         # print(text_data)
         lstm_out, (hn, cn) = self.lstm(text_data)
         hn_batch_first = torch.transpose(hn, 0, 1).contiguous()
-        fc_input = torch.cat((hn_batch_first.view(hn_batch_first.shape[0], -1), extra_data), dim=1)
+        # fc_input = torch.cat((hn_batch_first.view(hn_batch_first.shape[0], -1), extra_data), dim=1)
+        fc_input = hn_batch_first.view(hn_batch_first.shape[0], -1)
         output = self.fc(fc_input)
         out_probs = F.softmax(output, dim=1).detach()
         # print(tag)

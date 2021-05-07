@@ -181,7 +181,7 @@ class DataFetcher:
         )
         agg_name = "sale_data"
         # 选择要查询的数据
-        agg_fields = {"bclk": "bclk", "pclk": "pclk", "cost": "cost", "clk": "clk", 'imp': 'imp',
+        agg_fields = {"bclk": "bclk", "pclk": "pclk", "cost": "cost", "clk": "clk", 'imp': 'imp', 'share': 'share', 'comment': 'comment', 'like': 'like',
         "follow": "follow", "cancelfollow": "cancelfollow", "report": "report", "block": "block", "negative": "negative", "paly3s": "play3s"}
         aggs = {}
         for agg_field, target in agg_fields.items():
@@ -265,7 +265,8 @@ if __name__ == "__main__":
     # 一般来说，这个文件不需要存储两次，其区别仅仅是是否包含了es中的数据
     data_path = os.path.join(data_folder, config.raw_data_file)
     DataFetcher(data_path=data_path, target_file_name=config.raw_data_file,
-               es=True, analyze=False, from_db=False, log_level=logging.INFO)
+               es=True, analyze=False, from_db=True
+                , log_level=logging.INFO)
 
 # type WetecMaterialDailyReport struct {
 # 	Id           string    `json:"-"`
