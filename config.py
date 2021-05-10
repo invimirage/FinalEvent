@@ -12,13 +12,22 @@ import os
 
 this_path = os.path.realpath(__file__)
 this_folder = os.path.split(this_path)[0]
+# 需要修改下面的文件夹
 data_folder = os.path.join(this_folder, "Data", "kuaishou_data_0506")
+img_folder = os.path.join(this_folder, "Data", "images")
+video_folder = os.path.join(this_folder, "Data", "videos")
 raw_data_file = os.path.join(data_folder, "data.csv")
-grouped_data_file = os.path.join(data_folder, 'grouped.csv')
+grouped_data_file = os.path.join(data_folder, "grouped.csv")
 embed_data_file = os.path.join(data_folder, "vector_embed.npy")
-bert_path = os.path.join(this_folder, 'Models', 'Bert')
-parameter_file = os.path.join(this_folder, 'Hyperparameters.json')
-log_dir = os.path.join(this_folder, 'Logs')
+frame_data_file = os.path.join(this_folder, "Data", "frames.npz")
+
+model_save_path = os.path.join(this_folder, "Models")
+bert_path = os.path.join(this_folder, "Models", "Bert")
+efficient_path = os.path.join(this_folder, "Models", "efficientnet-b4")
+parameter_file = os.path.join(this_folder, "Hyperparameters.json")
+log_dir = os.path.join(this_folder, "Logs")
+
+video_url_prefix = "https://constrain.adwetec.com/material/creative/video/"
 
 all_cols = [
     "id",
@@ -118,4 +127,65 @@ bert_batch_size = 10
 max_word_number = 500
 
 # 特殊的广告主
-advids = ['407', '555', '1175', '929', '933', '574', '932', '680', '539', '1271', '1213', '537', '606', '1018', '575', '703', '670', '931', '543', '576', '990', '569', '780', '633', '673', '682', '512', '496', '1202', '480', '895', '1323', '618', '827', '1253', '865', '658', '1185', '525', '896', '1209', '547', '1280', '689', '603', '473', '64', '454', '283', '804', '805', '690', '175', '769', '596', '488', '655', '578', '1216', '1104']
+advids = [
+    "407",
+    "555",
+    "1175",
+    "929",
+    "933",
+    "574",
+    "932",
+    "680",
+    "539",
+    "1271",
+    "1213",
+    "537",
+    "606",
+    "1018",
+    "575",
+    "703",
+    "670",
+    "931",
+    "543",
+    "576",
+    "990",
+    "569",
+    "780",
+    "633",
+    "673",
+    "682",
+    "512",
+    "496",
+    "1202",
+    "480",
+    "895",
+    "1323",
+    "618",
+    "827",
+    "1253",
+    "865",
+    "658",
+    "1185",
+    "525",
+    "896",
+    "1209",
+    "547",
+    "1280",
+    "689",
+    "603",
+    "473",
+    "64",
+    "454",
+    "283",
+    "804",
+    "805",
+    "690",
+    "175",
+    "769",
+    "596",
+    "488",
+    "655",
+    "578",
+    "1216",
+    "1104",
+]

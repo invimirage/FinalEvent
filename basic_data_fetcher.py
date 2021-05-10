@@ -22,7 +22,7 @@ from utils import *
 
 class DataFetcher:
     def __init__(self, data_path="Data/Data", **kwargs):
-        self.logger = init_logger(kwargs['log_level'])
+        self.logger = init_logger(kwargs["log_level"])
         self.data_folder = config.data_folder
         self.logger.debug("folder : %s" % self.data_folder)
         if kwargs["from_db"]:
@@ -110,7 +110,7 @@ class DataFetcher:
             # 目前只搞快手
             self.get_es_data(kuaishou_data["id"])
 
-        self.data.to_csv(os.path.join(self.data_folder, kwargs['target_file_name']))
+        self.data.to_csv(os.path.join(self.data_folder, kwargs["target_file_name"]))
 
     def get_data_from_db(self):
         # 打开数据库连接
@@ -120,7 +120,7 @@ class DataFetcher:
             passwd="t0dG18PjAJ8c8EgR",
             database="adwetec_prod",
         )
-        self.logger.info('Successfully connected to database')
+        self.logger.info("Successfully connected to database")
         # 使用 cursor() 方法创建一个游标对象 cursor
         cursor = db.cursor()
 
@@ -181,8 +181,22 @@ class DataFetcher:
         )
         agg_name = "sale_data"
         # 选择要查询的数据
-        agg_fields = {"bclk": "bclk", "pclk": "pclk", "cost": "cost", "clk": "clk", 'imp': 'imp', 'share': 'share', 'comment': 'comment', 'like': 'like',
-        "follow": "follow", "cancelfollow": "cancelfollow", "report": "report", "block": "block", "negative": "negative", "paly3s": "play3s"}
+        agg_fields = {
+            "bclk": "bclk",
+            "pclk": "pclk",
+            "cost": "cost",
+            "clk": "clk",
+            "imp": "imp",
+            "share": "share",
+            "comment": "comment",
+            "like": "like",
+            "follow": "follow",
+            "cancelfollow": "cancelfollow",
+            "report": "report",
+            "block": "block",
+            "negative": "negative",
+            "paly3s": "play3s",
+        }
         aggs = {}
         for agg_field, target in agg_fields.items():
             aggs[agg_field] = {"sum": {"field": target}}
@@ -208,8 +222,11 @@ class DataFetcher:
                             "script": {
                                 "script": {
                                     "source": "doc['date'].value.toInstant().toEpochMilli() - "
-                                              "doc['vtime'].value.toInstant().toEpochMilli() <= params.aMonth",
-                                    "params": {"aMonth": 2592000000, "aWeek": 604800000},
+                                    "doc['vtime'].value.toInstant().toEpochMilli() <= params.aMonth",
+                                    "params": {
+                                        "aMonth": 2592000000,
+                                        "aWeek": 604800000,
+                                    },
                                 }
                             }
                         },
@@ -219,7 +236,7 @@ class DataFetcher:
             },
             "sort": [{"date": {"order": "desc"}}],
         }
-        self.logger.info('Collecting es data...')
+        self.logger.info("Collecting es data...")
         self.logger.debug(query)
         result = es.search(index="creative-report-*", body=query)
         self.logger.debug(result["_shards"])
@@ -230,20 +247,25 @@ class DataFetcher:
         )
         es_data = []
         for dta in sale_data:
-            id, advid = dta['key'].split(',')
+            id, advid = dta["key"].split(",")
             this_data = [id, advid]
             for field in agg_fields:
-                this_data.append(dta[field]['value'])
+                this_data.append(dta[field]["value"])
             es_data.append(this_data)
 
         # 包含没有es数据和es数据量太少的
         es_data = np.array(es_data, dtype=int)
-        es_dataframe = pd.DataFrame(data=es_data, columns=['id', 'advid'] + list(agg_fields.keys()))
+        es_dataframe = pd.DataFrame(
+            data=es_data, columns=["id", "advid"] + list(agg_fields.keys())
+        )
 
-        db_dataframe = self.data.set_index('id')
+        db_dataframe = self.data.set_index("id")
         # print(es_dataframe.head(), db_dataframe.head())
-        merged_data = es_dataframe.join(db_dataframe, on='id', lsuffix='_db')
-        self.logger.info('Data length before merging: %d\nData length after merging: %d' % (len(db_dataframe), len(merged_data)))
+        merged_data = es_dataframe.join(db_dataframe, on="id", lsuffix="_db")
+        self.logger.info(
+            "Data length before merging: %d\nData length after merging: %d"
+            % (len(db_dataframe), len(merged_data))
+        )
         self.data = merged_data
         # print(self.data.index)
         # for col_num, id in enumerate(matids):
@@ -258,15 +280,21 @@ class DataFetcher:
         # for field in agg_fields:
         #     self.data[field] = new_cols[field]
 
+
 if __name__ == "__main__":
     data_folder = config.data_folder
     if not os.path.exists(data_folder):
         os.makedirs(data_folder)
     # 一般来说，这个文件不需要存储两次，其区别仅仅是是否包含了es中的数据
     data_path = os.path.join(data_folder, config.raw_data_file)
-    DataFetcher(data_path=data_path, target_file_name=config.raw_data_file,
-               es=True, analyze=False, from_db=True
-                , log_level=logging.INFO)
+    DataFetcher(
+        data_path=data_path,
+        target_file_name=config.raw_data_file,
+        es=True,
+        analyze=False,
+        from_db=True,
+        log_level=logging.INFO,
+    )
 
 # type WetecMaterialDailyReport struct {
 # 	Id           string    `json:"-"`

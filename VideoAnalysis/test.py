@@ -9,16 +9,17 @@
 """
 from efficientnet_pytorch import EfficientNet
 import numpy as np
+
 a = [1, 2, 1]
-b = [1, 2,  1, 1]
+b = [1, 2, 1, 1]
 print(a + b)
 # 补0，这样1月对应日期就是day_in_month[1]
 day_in_month = [0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
-a = [[1, 2,3], [2, 3]]
-d = {'1':1, "2":2}
+a = [[1, 2, 3], [2, 3]]
+d = {"1": 1, "2": 2}
 b = np.array(a, dtype=object)
-np.save('test.npy', b)
-x = np.load('test.npy', allow_pickle=True)
+np.save("test.npy", b)
+x = np.load("test.npy", allow_pickle=True)
 x = x.tolist()
 print(x)
 # 计算校验和，输入为身份证id，用string形式

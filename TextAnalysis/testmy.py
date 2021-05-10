@@ -8,10 +8,39 @@ import torch
 import math
 from transformers import BertModel, BertTokenizer, BertConfig
 import torch.nn.utils.rnn as rnn
+import config
+import subprocess
+import os
+import time
 
-
-
-print(lrs)
+a = np.array([1, 2, 3 ,4])
+print(np.random.choice(a, 2, replace=False))
+# res = pd.read_csv("results.csv")
+# pred = np.array(res['pred'])
+# tag = np.array(res['tag'])
+# test = pred < 0.35
+# count = np.sum(test)
+# tags = tag[test]
+# preds = pred[test]
+# rate = np.sum(tags==0) / count
+# print(count, rate)
+# video_local_path = r"P:\PycharmProjects\FinalEvent\FinalEvent\Data\videos_sample\714546.mp4"
+# video_target_path = r"P:\PycharmProjects\FinalEvent\FinalEvent\Data\videos_sample\714546_test.mp4"
+# trans = r'ffmpeg -y  -i "%s" -r 5 -vf scale=180:-1 -map 0:0 "%s"' % (video_local_path, video_target_path)
+# p = subprocess.Popen(
+#     trans, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+# )
+# out, errs = p.communicate(timeout=10)
+# print(out)
+# print(out.decode("utf-8"))
+# # os.remove(video_local_path)
+#
+# print('deleted')
+# out = p.stdout.read()
+# temp = str(out.decode("utf-8"))
+# print(temp)
+# a = np.array([1, 1, 3])
+# print(np.sum(a == 1))
 # d = {'1':1}
 # train_inds = [1, 2, 3 ,4 ,5]
 # trainning_size = 0.8
@@ -44,10 +73,10 @@ print(lrs)
 #     print(name, param.requires_grad)
 #     if name == 'encoder.layer.23.output.dense.weight':
 #         print(param)
-print([1]*4)
-tokenizer = BertTokenizer(vocab_file='../Models/Bert/vocab.txt')  # 初始化分词器
-s = '[SEP]'
-print(tokenizer.convert_tokens_to_ids(s))
+# print([1] * 4)
+# tokenizer = BertTokenizer(vocab_file="../Models/Bert/vocab.txt")  # 初始化分词器
+# s = "[SEP]"
+# print(tokenizer.convert_tokens_to_ids(s))
 # sentence1 = '我今天吃了馒头，明天吃啥呢？'
 # sentence2 = '我明天想吃玉米'
 # res = tokenizer.encode_plus(sentence1, sentence2)

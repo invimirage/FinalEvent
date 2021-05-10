@@ -28,53 +28,29 @@ for agg_field, target in agg_fields.items():
     aggs[agg_field] = {"sum": {"field": target}}
 query = {
     "size": 1,
-  "aggs": {
-    "advid_video_count": {
-      "terms": {
-        "field": "advid",
-        "size": 2000,
-        "order": {
-          "count": "desc"
+    "aggs": {
+        "advid_video_count": {
+            "terms": {"field": "advid", "size": 2000, "order": {"count": "desc"}},
+            "aggs": {"count": {"cardinality": {"field": "matid"}}},
         }
-      },
-      "aggs": {
-        "count": {
-          "cardinality": {
-            "field": "matid"
-          }
+    },
+    "query": {
+        "bool": {
+            "must": [{"term": {"medid": 8}}],
+            "must_not": [{"terms": {"matid": [0, -1]}}],
         }
-      }
-    }
-  },
-  "query": {
-    "bool": {
-      "must": [
-        {
-          "term": {
-            "medid": 8
-          }
-        }
-      ],
-      "must_not": [
-        {
-          "terms": {
-            "matid": [0,-1]
-          }
-        }
-      ]
-    }
-  }
+    },
 }
 result = es.search(index="creative-report-*", body=query)
-buckets = result['aggregations']['advid_video_count']['buckets']
+buckets = result["aggregations"]["advid_video_count"]["buckets"]
 print(len(buckets))
-print(result['aggregations']['advid_video_count']['sum_other_doc_count'])
+print(result["aggregations"]["advid_video_count"]["sum_other_doc_count"])
 sum_ad = 0
 one_hots = []
 for bucket in buckets:
-    sum_ad += int(bucket['count']['value'])
-    if bucket['count']['value'] < 500:
+    sum_ad += int(bucket["count"]["value"])
+    if bucket["count"]["value"] < 500:
         break
-    one_hots.append(bucket['key'])
+    one_hots.append(bucket["key"])
     # print('Advid: %s \n Distinct ad count: %s \n Total ad count: %s' % (bucket['key'], bucket['count']['value'], bucket['doc_count']))
 print(len(one_hots), one_hots)

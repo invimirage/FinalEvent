@@ -8,6 +8,9 @@
 @github: local 16351726fa15c85f565b7d5fecdf320ea67a72ef
 """
 import pandas as pd
+import config
 
-video_sources = pd.read_csv("SourceURL/test_data.csv", encoding="utf-8")
-print(video_sources.head(10))
+data = pd.read_csv(config.raw_data_file)
+print(data.columns)
+for i in data["file"][:10]:
+    print("https://constrain.adwetec.com/material/creative/video/" + i)

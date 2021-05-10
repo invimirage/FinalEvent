@@ -11,28 +11,60 @@
     "min_slice_length": 5
   },
   "SeparatedLSTM" : {
-    "hidden_length": 128,
-    "layer_number": 3,
-    "linear_hidden_length": 32,
+    "hidden_length": 256,
+    "layer_number": 2,
+    "linear_hidden_length": 64,
     "drop_out_rate": 0.5,
     "common": {
-      "batch_size": 400,
+      "batch_size": 800,
       "learning_rate": 1e-4,
       "training_size": 0.8,
-      "number_epochs": 100
+      "number_epochs": 20,
+      "random": 1
     }
   },
   "BertWithCNN": {
     "hidden_length": 16,
     "linear_hidden_length": 32,
-    "grad_layer_name": "encoder.layer.23.attention.self.query.weight",
+    "grad_layer_name": "aaa",
     "drop_out_rate": 0.5,
     "channels": 3,
     "common": {
       "batch_size": 400,
       "learning_rate": 1e-4,
       "training_size": 0.8,
-      "number_epochs": 100
+      "number_epochs": 100,
+      "random": 1
+    }
+  },
+  "PictureNet": {
+    "hidden_length": 16,
+    "linear_hidden_length": 32,
+    "grad_layer_name": "aaa_blocks.31",
+    "drop_out_rate": 0.5,
+    "channels": 3,
+    "common": {
+      "batch_size": 400,
+      "learning_rate": 1e-4,
+      "training_size": 0.8,
+      "number_epochs": 100,
+      "random": 1
+    }
+  },
+  "VideoNet": {
+    "PictureNet": {
+      "hidden_length": 16,
+      "linear_hidden_length": 32,
+      "grad_layer_name": "aaa_blocks.31",
+      "drop_out_rate": 0.5,
+      "channels": 3
+    },
+    "common": {
+      "batch_size": 400,
+      "learning_rate": 1e-4,
+      "training_size": 0.8,
+      "number_epochs": 100,
+      "random": 1
     }
   }
 }
