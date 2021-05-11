@@ -47,7 +47,6 @@ def init_logger(log_level, name, write_to_file=False, clean_up=False):
     ch.setFormatter(formatter)
 
     logger.addHandler(ch)
-
     if write_to_file:
         # 2、创建一个handler，用于写入日志文件
         log_dir = config.log_dir
@@ -109,10 +108,10 @@ def adjust_hyperparams(logger, params, sample_number, model_name, run_model, **k
         all_params = {
             "hidden_length": [128, 256, 512],
             "layer_number": [1, 2, 3],
-            "linear_hidden_length": [32, 64, 128],
-            "drop_out_rate": 0.5,
-            "batch_size": [200, 400, 600],
-            "learning_rate": lrs,
+            "linear_hidden_length": [64, 128],
+            "drop_out_rate": [0.5, 0.6],
+            "batch_size": [400, 600, 800],
+            "learning_rate": 1e-4,
             "training_size": 0.8,
             "number_epochs": 100
         }
@@ -124,13 +123,13 @@ def adjust_hyperparams(logger, params, sample_number, model_name, run_model, **k
         step = (lr_high - lr_low) / (lr_seps - 1)
         lrs = 10 ** (-(np.arange(lr_low, lr_high, step)))
         all_params = {
-            "hidden_length": [128, 256, 512],
+            "hidden_length": [32, 16, 8],
             "linear_hidden_length": [32, 64, 128],
             # "grad_layer_name": "encoder.layer.23.attention.self.query.weight",
             "drop_out_rate": 0.5,
-            "channels": [3, 4, 8],
+            "channels": [16, 32, 64],
             "batch_size": [50, 100, 150],
-            "learning_rate": lrs,
+            "learning_rate": 1e-4,
             "training_size": 0.8,
             "number_epochs": 100
         }
@@ -141,15 +140,21 @@ def adjust_hyperparams(logger, params, sample_number, model_name, run_model, **k
         step = (lr_high - lr_low) / (lr_seps - 1)
         lrs = 10 ** (-(np.arange(lr_low, lr_high, step)))
         all_params = {
-            "hidden_length": [128, 256, 512],
-            "linear_hidden_length": [32, 64, 128],
-            # "grad_layer_name": "encoder.layer.23.attention.self.query.weight",
+            "frame_rate": 1,
+            "input_length": 512,
+            "pic_linear_hidden_length": 1024,
+            "pic_grad_layer_name": "aaa_blocks.31",
+            "pic_drop_out_rate": [0.5, 0.3, 0.6],
+            "pic_channels": 3,
+            "layer_number": 3,
+            "hidden_length": 512,
+            "linear_hidden_length": 128,
             "drop_out_rate": 0.5,
-            "channels": [3, 4, 8],
-            "batch_size": [50, 100, 150],
+            "batch_size": 400,
             "learning_rate": lrs,
             "training_size": 0.8,
-            "number_epochs": 100
+            "number_epochs": 100,
+            "random": 1
         }
     params_to_test = {}
     for param in all_params:
@@ -180,8 +185,10 @@ def adjust_hyperparams(logger, params, sample_number, model_name, run_model, **k
                 input_length=1024, extra_length=len(config.advids), hyperparams=params[model_name]
             )
         elif model_name == 'BertWithCNN':
-            model = BertWithCNN(bert_path=config.bert_path, extra_length=0, hyperparams=params['BertWithCNN'])
-        run_model(model=model, embed_type=kwargs['embed_type'], logger=logger)
+            model = BertWithCNN(bert_path=config.bert_path, extra_length=len(config.advids), hyperparams=params[model_name])
+        elif model_name == 'VideoNet':
+            model = VideoNet(extra_length=config.extra_feat_length, hyperparams=params[model_name])
+        run_model(model=model, logger=logger, kwargs=kwargs)
 
 def output_logs(self, epoch, kwargs: dict, *args):
     train_pred, train_loss, train_inds, test_pred, test_loss, test_inds = args
@@ -234,16 +241,17 @@ def build_batch(data_indexes:np.ndarray, batch_size:int, random=True, tag_data:t
     n_batch = math.ceil(len(data_indexes) / batch_size)
     batch_data = []
     if random:
-        tag_data = tag_data.numpy()
-        each_batch_size = batch_size // bin_number
+        if tag_data.shape[0] != data_indexes.shape[0]:
+            tag_data = tag_data[data_indexes].numpy()
+        else:
+            tag_data = tag_data.numpy()
+        each_batch_size = batch_size // bin_number + 1
         indexes_in_bins = []
+        for i in range(bin_number):
+            indexes_in_bins.append(data_indexes[tag_data == i])
+            # print(len(indexes_in_bins[i]))
         for i in range(n_batch):
-            this_batch_data = []
-            for i in range(bin_number):
-                indexes_in_bins.append(data_indexes[tag_data == i])
-                print(len(indexes_in_bins[i]))
-            for j in range(bin_number):
-                this_batch_data.append(np.random.choice(indexes_in_bins[j], each_batch_size, replace=False))
+            this_batch_data = [np.random.choice(indexes_in_bins[j], each_batch_size, replace=False) for j in range(bin_number)]
             this_batch_data = np.concatenate(this_batch_data, axis=0)
             batch_data.append(this_batch_data)
     else:
@@ -278,5 +286,7 @@ def load_model(file_name, model=None, info=False):
         tag = checkpoint['tag']
         return f1, id, pred, tag
 
+# 生成除视频、文本特征以外的特征
+# def parse_extra_features(data:pd.DataFrame):
 
 

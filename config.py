@@ -14,12 +14,15 @@ this_path = os.path.realpath(__file__)
 this_folder = os.path.split(this_path)[0]
 # 需要修改下面的文件夹
 data_folder = os.path.join(this_folder, "Data", "kuaishou_data_0506")
+# data_folder = os.path.join(this_folder, "Data", "sample")
 img_folder = os.path.join(this_folder, "Data", "images")
 video_folder = os.path.join(this_folder, "Data", "videos")
 raw_data_file = os.path.join(data_folder, "data.csv")
 grouped_data_file = os.path.join(data_folder, "grouped.csv")
 embed_data_file = os.path.join(data_folder, "vector_embed.npy")
-frame_data_file = os.path.join(this_folder, "Data", "frames.npz")
+# frame_data_folder = os.path.join(this_folder, "Data", "frames")
+frame_data_folder = r'E:\frames'
+video_frame_rate = 5
 
 model_save_path = os.path.join(this_folder, "Models")
 bert_path = os.path.join(this_folder, "Models", "Bert")
@@ -28,6 +31,8 @@ parameter_file = os.path.join(this_folder, "Hyperparameters.json")
 log_dir = os.path.join(this_folder, "Logs")
 
 video_url_prefix = "https://constrain.adwetec.com/material/creative/video/"
+
+graph_folder = os.path.join(this_folder, "Graphs")
 
 all_cols = [
     "id",
@@ -189,3 +194,4 @@ advids = [
     "1216",
     "1104",
 ]
+extra_feat_length = len(advids)

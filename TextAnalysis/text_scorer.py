@@ -295,51 +295,12 @@ class TextScorer:
         #     #
         #     #     loss = F.mse_loss(cpc_pred, tags)
 
-    def get_results(self, text, tag, pred, filepath):
-        df = pd.DataFrame(columns=('text', 'pred', 'tag'))
-        df['text'] = list(text)
-        df['pred'] = list(pred.cpu().detach().numpy()[:, 1])
-        df['tag'] = list(tag.cpu().detach().numpy())
-        df.to_csv(filepath, index=False)
-
-    def output_logs(self, epoch, kwargs: dict, *args):
-        train_pred, train_loss, train_inds, test_pred, test_loss, test_inds = args
-        pred_worst = test_pred.cpu().detach().numpy()[:, 0].flatten()
-        top10 = test_inds[np.array(pred_worst).argsort()[::-1][0:10]]
-        for id, tag, text in zip(
-            kwargs["ids"][top10], self.tag[top10], kwargs["text"][top10]
-        ):
-            self.logger.info("{} {} {}".format(id, tag, text))
-        pred_best = test_pred.cpu().detach().numpy()[:, -1].flatten()
-        top10 = test_inds[np.array(pred_best).argsort()[::-1][0:10]]
-        self.logger.info("Best Top 10: {}".format(kwargs["ids"][top10]))
-        for id, tag, text in zip(
-            kwargs["ids"][top10], self.tag[top10], kwargs["text"][top10]
-        ):
-            self.logger.info("{} {} {}".format(id, tag, text))
-        pred_train = np.argmax(train_pred.cpu().detach(), axis=1)
-        pred_test = np.argmax(test_pred.cpu().detach(), axis=1)
-        train_tags_cpu = self.tag[train_inds].cpu().numpy()
-        test_tags_cpu = self.tag[test_inds].cpu().numpy()
-        self.logger.info("------------Epoch %d------------" % epoch)
-        self.logger.info("Training set")
-        self.logger.info("Loss: %.4lf" % train_loss.cpu().detach())
-        p_class, r_class, f_class, _ = precision_recall_fscore_support(
-            pred_train, train_tags_cpu
-        )
-        self.logger.info(p_class)
-        self.logger.info(r_class)
-        self.logger.info(f_class)
-        self.logger.info("Testing set")
-        self.logger.info("Loss: %.4lf" % test_loss.cpu().detach())
-        p_class, r_class, f_class, _ = precision_recall_fscore_support(
-            pred_test, test_tags_cpu
-        )
-        self.logger.info(p_class)
-        self.logger.info(r_class)
-        self.logger.info(f_class)
-        f1_mean = np.mean(f_class)
-        return f1_mean
+    # def get_results(self, text, tag, pred, filepath):
+    #     df = pd.DataFrame(columns=('text', 'pred', 'tag'))
+    #     df['text'] = list(text)
+    #     df['pred'] = list(pred.cpu().detach().numpy()[:, 1])
+    #     df['tag'] = list(tag.cpu().detach().numpy())
+    #     df.to_csv(filepath, index=False)
 
     def run_model_separated_lstm(self, mode, kwargs):
 
@@ -399,7 +360,6 @@ class TextScorer:
                 #     self.logger.info('Epoch number: %d' % epoch)
 
                 if epoch % 1 == 0:
-
                     train_batches = build_batch(train_inds_sample, batch_size, False)
                     test_batches = build_batch(test_inds, batch_size, False)
                     training_preds = []
@@ -435,7 +395,7 @@ class TextScorer:
                         best_epoch = epoch
                         if f1_mean > self.best_f1:
                             self.best_f1 = f1_mean
-                            save_the_best(self.model, f1_mean, kwargs['id'], tags[test_inds], pred_test,
+                            save_the_best(self.model, f1_mean, kwargs['ids'], tags[test_inds], pred_test,
                                           self.logger.name)
 
                     self.logger.info(
@@ -444,7 +404,7 @@ class TextScorer:
                     if epoch - best_epoch > 10:
                         break
 
-                train_batches = build_batch(train_inds, batch_inds, random_batching)
+                train_batches = build_batch(train_inds, batch_size, random_batching, tags)
                 for batch_inds in train_batches:
                     _, loss = feed_model(
                         text_embed_data, extra_feats, tags, batch_inds
@@ -536,10 +496,6 @@ class TextScorer:
             best_micro_f1 = 0
             best_epoch = 0
             for epoch in range(num_epoch):
-
-                # if epoch % 10 == 0:
-                #     self.logger.info('Epoch number: %d' % epoch)
-
                 if epoch % 1 == 0:
                     train_batches = build_batch(train_inds_sample, batch_size, False)
                     test_batches = build_batch(test_inds, batch_size, False)
@@ -567,7 +523,8 @@ class TextScorer:
                         testing_losses.append(loss.unsqueeze(0))
                     pred_test = torch.cat(testing_preds, dim=0)
                     test_loss = torch.mean(torch.cat(testing_losses, dim=0))
-                    f1_mean = self.output_logs(
+                    f1_mean = output_logs(
+                        self,
                         epoch,
                         kwargs,
                         pred_train,
@@ -582,14 +539,14 @@ class TextScorer:
                         best_epoch = epoch
                         if f1_mean > self.best_f1:
                             self.best_f1 = f1_mean
-                            save_the_best(self.model, f1_mean, kwargs['id'], tags[test_inds], pred_test, self.logger.name)
+                            save_the_best(self.model, f1_mean, kwargs['ids'], tags[test_inds], pred_test, self.logger.name)
                     self.logger.info(
                         "Best Micro-F1: %.6lf, epoch %d" % (best_micro_f1, best_epoch)
                     )
                     if epoch - best_epoch > 10:
                         break
 
-                train_batches = build_batch(train_inds, batch_size, random_batching)
+                train_batches = build_batch(train_inds, batch_size, random_batching, tags)
                 for batch_inds in train_batches:
                     _, loss = feed_model(
                         bert_input, extra_feats, tags, batch_inds
@@ -600,10 +557,6 @@ class TextScorer:
                     for name, param in self.model.named_parameters():
                         self.logger.debug(param.grad)
                     optimizer.step()
-                #
-                # for name, param in self.model.named_parameters():
-                #     if name == "fcs.2.bias":
-                #         self.logger.debug(name, param)
         else:
             pass
 
@@ -664,8 +617,8 @@ def gen_correct_data(text_data, embeds):
     return embeds_per_text
 
 
-def main(model, embed_type: str, logger) -> None:
-
+def main(model, logger, kwargs) -> None:
+    embed_type = kwargs["embed_type"]
     requires_embedding = model.requires_embed
     run_params = model.hyperparams["common"]
     assert embed_type in ["api", "local"]
@@ -726,7 +679,6 @@ def main(model, embed_type: str, logger) -> None:
         tag=tag_data,
         mode=embed_type,
         logger=logger,
-        extra_feat_len=len(config.advids),
         model=model,
         f1=best_f1
     )
@@ -778,23 +730,20 @@ def main(model, embed_type: str, logger) -> None:
         params=run_params,
     )
 
-
-
 if __name__ == "__main__":
     # data_source raw embed
     # embed_type local api
     with open(config.parameter_file) as f:
         params = json.load(f)
-    logger = init_logger(log_level=logging.INFO, name='SeparatedLSTM_with_advid', write_to_file=True, clean_up=True)
-    model_name = 'SeparatedLSTM'
-    adjust_hyperparams(logger, params, 50, model_name='SeparatedLSTM')
-    if model_name == 'SeparatedLSTM':
-        model = SeparatedLSTM(
-            input_length=1024, extra_length=len(config.advids), hyperparams=params[model_name]
-        )
-    elif model_name == 'BertWithCNN':
-        model = BertWithCNN(bert_path=config.bert_path, extra_length=0, hyperparams=params['BertWithCNN'])
-    main(model=model, embed_type="local", logger=logger)
+    logger = init_logger(log_level=logging.INFO, name='BertWithCNN_with_advid', write_to_file=True, clean_up=True)
+    adjust_hyperparams(logger, params, sample_number=10, model_name='BertWithCNN', run_model=main, embed_type="local")
+    # if model_name == 'SeparatedLSTM':
+    #     model = SeparatedLSTM(
+    #         input_length=1024, extra_length=len(config.advids), hyperparams=params[model_name]
+    #     )
+    # elif model_name == 'BertWithCNN':
+    #     model = BertWithCNN(bert_path=config.bert_path, extra_length=0, hyperparams=params['BertWithCNN'])
+    # main(model=model, logger=logger, kwargs={"embed_type": "local"})
     # slstm = SeparatedLSTM(input_length=1024, extra_length=0, hyperparams=params['SeparatedLSTM'])
     # bwc = BertWithCNN(bert_path=config.bert_path, extra_length=0, hyperparams=params['BertWithCNN'])
     # main(model=slstm, embed_type="local", log_level=logging.INFO)

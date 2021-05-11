@@ -124,9 +124,10 @@ class BertWithCNN(MyModule):
         )
         last_encode = bert_output[0].unsqueeze(1)
         pooler_output = self.pooler(last_encode).view(batch_size, -1)
-        # fc_input = torch.cat((pooler_output, extra_data), dim=1)
-        fc_input = pooler_output
+        fc_input = torch.cat((pooler_output, extra_data), dim=1)
+        # fc_input = pooler_output
         output = self.fcs(fc_input)
+        # print(output)
         out_probs = F.softmax(output, dim=1).cpu().detach()
         # print(tag)
         if tag is not None:
@@ -309,11 +310,10 @@ class PictureNet(MyModule):
         self.grad_layer_name = hyperparameters['grad_layer_name']
         grad = False
         for name, param in self.ec_model.named_parameters():
-            if "_blocks.31" in name:
+            if self.grad_layer_name in name:
                 grad = True
             param.requires_grad = grad
         feature_num = self.ec_model._fc.in_features
-        self.ec_model.extract_features()
         self.fcs = nn.Sequential(
             nn.Linear(feature_num + extra_length, linear_hidden_length),
             nn.ReLU(),
@@ -353,12 +353,17 @@ class PictureNet(MyModule):
         # print(output.shape)
 
 class VideoNet(MyModule):
-    def __init__(self, hyperparams, input_length, extra_length):
+    def __init__(self, extra_length,  hyperparams):
         super().__init__(name="VideoNet", requires_embed=False, hyperparams=hyperparams)
-        self.img_net = PictureNet(hyperparams["PictureNet"], out_dims=input_length, extra_length=0)
+        input_length = hyperparams["input_length"]
+        pic_params = {}
+        for key, param in hyperparams.items():
+            if key.startswith('pic_'):
+                pic_params[key.lstrip('pic_')] = param
+        self.img_net = PictureNet(pic_params, out_dims=input_length, extra_length=0)
         hidden_length = hyperparams["hidden_length"]
         layer_number = hyperparams["layer_number"]
-        linear_hidden_length = hyperparams["hidden_length"]
+        linear_hidden_length = hyperparams["linear_hidden_length"]
         drop_out_rate = hyperparams["drop_out_rate"]
         self.lstm = nn.LSTM(
             input_size=input_length,
@@ -376,28 +381,36 @@ class VideoNet(MyModule):
             nn.Linear(linear_hidden_length, config.bin_number),
         )
 
-    # input为batch_size个list，每个list包含对应的视频帧数据，数据为cuda上的tensor
-    def forward(self, video_input, extra_feats, tag=None, image_batch_size=100):
+    # input为batch_size个list，每个list包含对应的视频帧数据，数据为cpu上的tensor
+    def forward(self, video_input, extra_feats, tag=None, image_batch_size=100, device="cpu"):
         frame_data = []
         sep_points = [0]
         for video_frames in video_input:
+            # print(video_frames.shape)
             frame_data.append(video_frames)
-            sep_points.append(sep_points[-1] + len(video_frames))
-        n_batch = math.ceil(len(frame_data) / image_batch_size)
+            sep_points.append(sep_points[-1] + video_frames.shape[0])
         frame_data_flatten = torch.cat(frame_data, dim=0)
+        n_batch = math.ceil(frame_data_flatten.shape[0] / image_batch_size)
+        # print(frame_data_flatten.shape)
         img_embeds = []
         for i in range(n_batch):
             sta = i * image_batch_size
             end = (i + 1) * image_batch_size
             img_data = frame_data_flatten[sta:end]
-            img_embed = self.img_net.extract_features(img_data)
+            img_embed = self.img_net.extract_features(img_data.to(device))
             img_embeds.append(img_embed)
+            # print(img_embed.shape)
         img_embeds_flatten = torch.cat(img_embeds)
+        # print(img_embeds_flatten.shape)
+        # print(sep_points)
         video_data_input = []
         lengths = []
         for i in range(len(video_input)):
             video_data_input.append(img_embeds_flatten[sep_points[i]:sep_points[i+1]])
             lengths.append(sep_points[i+1] - sep_points[i])
+        # print(len(video_data_input))
+        # for i in video_data_input:
+        #     print(i.shape)
         input_padded = rnn.pad_sequence(video_data_input, batch_first=True)
         input_packed = rnn.pack_padded_sequence(
             input_padded, lengths=lengths, batch_first=True, enforce_sorted=False

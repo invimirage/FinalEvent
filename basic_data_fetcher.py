@@ -27,30 +27,10 @@ class DataFetcher:
         self.logger.debug("folder : %s" % self.data_folder)
         if kwargs["from_db"]:
             data = self.get_data_from_db()
-            data.to_csv(data_path)
+            data.to_csv(data_path, index=False)
         else:
             data = pd.read_csv(data_path)
         # print(data.columns)
-        # redundant_cols = [
-        #     "cluster",
-        #     "file_type",
-        #     "status",
-        #     "creator_id",
-        #     "phash",
-        #     "advids",
-        #     "ffmpeg_info",
-        #     "entities",
-        #     "phash2",
-        #     "materialid",
-        #     "materialurl",
-        #     "direct_id",
-        #     "shoot_id",
-        #     "script_id",
-        #     "subtitle",
-        #     "describe",
-        #     "report_unchange",
-        #     "report_updatetime",
-        # ]
         # data.drop(axis=1, columns=redundant_cols)
         self.logger.info("Data length: %d" % len(data))
         self.logger.debug("Data containing columns: {}".format(data.columns))
@@ -110,7 +90,7 @@ class DataFetcher:
             # 目前只搞快手
             self.get_es_data(kuaishou_data["id"])
 
-        self.data.to_csv(os.path.join(self.data_folder, kwargs["target_file_name"]))
+        self.data.to_csv(os.path.join(self.data_folder, kwargs["target_file_name"]), index=False)
 
     def get_data_from_db(self):
         # 打开数据库连接

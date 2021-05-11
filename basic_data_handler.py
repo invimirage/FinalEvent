@@ -217,7 +217,13 @@ class DataHandler:
         print("https://constrain.adwetec.com/material/creative/video/" + data['file'][row_num])
 
     def build_sample(self, sample_number=1000):
-        sample_data = self.data.head(sample_number)
+        video_folder = config.video_folder
+        ids = list(map(lambda x: x.split('.')[0], os.listdir(video_folder)))
+        ids = list(filter(lambda x: not x.endswith('_origin'), ids))
+        ids = [int(id) for id in ids]
+        sep = len(ids) // sample_number
+        selected_ids = ids[::sep]
+        sample_data = self.data.loc[self.data['id'].isin(selected_ids)]
         sample_file = os.path.join(config.this_folder, 'Data', 'sample', 'data.csv')
         sample_data.to_csv(sample_file)
 
@@ -231,14 +237,17 @@ class DataHandler:
 
 
 if __name__ == "__main__":
-    # data_handler = DataHandler(os.path.join(config.data_folder, config.raw_data_file))
-
     data_handler = DataHandler(config.raw_data_file)
-    data_handler.check_data(541132)
-    # data_handler.display_tags()
-    # data_handler.seperate_text()
 
-    # data_handler.gen_tag(["cost"], 100)
+    # data_handler.check_data(541132)
+
+    # data_handler.display_tags()
+
+    data_handler.seperate_text()
+
+    data_handler.gen_tag(["cost"], 100)
+
     # data_handler.store_data()
+
     # data_handler.build_sample(1000)
     # data_handler.relations_bctr_imp(img=False)

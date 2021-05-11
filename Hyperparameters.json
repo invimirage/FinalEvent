@@ -38,7 +38,6 @@
     }
   },
   "PictureNet": {
-    "hidden_length": 16,
     "linear_hidden_length": 32,
     "grad_layer_name": "aaa_blocks.31",
     "drop_out_rate": 0.5,
@@ -52,15 +51,18 @@
     }
   },
   "VideoNet": {
-    "PictureNet": {
-      "hidden_length": 16,
-      "linear_hidden_length": 32,
-      "grad_layer_name": "aaa_blocks.31",
-      "drop_out_rate": 0.5,
-      "channels": 3
-    },
+    "frame_rate": 1,
+    "input_length": 512,
+    "hidden_length": 512,
+    "linear_hidden_length": 128,
+    "pic_linear_hidden_length": 32,
+    "layer_number": 3,
+    "pic_grad_layer_name": "aaa_blocks.31",
+    "pic_drop_out_rate": 0.5,
+    "pic_channels": 3,
+    "drop_out_rate": 0.5,
     "common": {
-      "batch_size": 400,
+      "batch_size": 500,
       "learning_rate": 1e-4,
       "training_size": 0.8,
       "number_epochs": 100,

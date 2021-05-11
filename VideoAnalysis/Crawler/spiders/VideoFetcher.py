@@ -19,6 +19,7 @@ class VideoFetcher(scrapy.Spider):
         encoding="utf-8",
     )
     video_folder = config.video_folder
+    video_temp_folder = r'C:\Users\月亮上的珠珠\Desktop\temp'
     video_list = list(filter(lambda x: x[-4:] == ".mp4", os.listdir(video_folder)))
     ids_already = list(map(lambda x: x.split(".")[0], video_list))
     video_dict = {}
@@ -29,7 +30,7 @@ class VideoFetcher(scrapy.Spider):
             video_dict[target_url] = str(id)
             urls.append(target_url)
     print("%d videos waiting to download" % len(urls))
-    start_urls = urls[::50]
+    start_urls = urls
     # img_dict = {k: str(v) + '.jpeg' for k, v in zip(start_urls, img_sources["id"])}
 
     def get_vedio_height_width(self, filename):
@@ -46,7 +47,7 @@ class VideoFetcher(scrapy.Spider):
 
     def parse(self, response):
         video_name = self.video_dict[str(response.url)]
-        video_local_path = os.path.join(self.video_folder, video_name + '_origin.mp4')
+        video_local_path = os.path.join(self.video_temp_folder, video_name + '_origin.mp4')
         video_target_path = os.path.join(self.video_folder, video_name + '.mp4')
         with open(video_local_path, "wb") as f:
             f.write(response.body)
