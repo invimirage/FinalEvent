@@ -16,14 +16,18 @@ import config
 from matplotlib import pyplot as plt
 from sklearn import linear_model
 import json
+import datetime
 from utils import *
-
+from multiprocessing import Process, Array, Value, Lock
 
 class DataHandler:
     def __init__(self, data_path, log_level=logging.INFO):
         self.data_path = data_path
+        self.data_folder = os.path.split(data_path)[0]
         self.logger = init_logger(log_level, name="DataHandler")
         self.data = pd.read_csv(data_path)
+        self.data_len = len(self.data)
+        self.logger.info("Date length: %d" % self.data_len)
         self.data["key"] = list(
             map(
                 lambda x1, x2: str(x1) + " " + str(x2),
@@ -102,13 +106,17 @@ class DataHandler:
         seperated_len = []
         seps = []
         seperated_text = []
+        speech_speeds = []
         sum = 0
         for raw, id in zip(raw_data, ids):
             sentences = []
             raw = json.loads(raw)
             words_with_time = []
+            speech_speed = []
             for res_detail in raw["Response"]["Data"]["ResultDetail"]:
                 words_with_time.extend(res_detail["Words"])
+                speech_speed.append(res_detail["SpeechSpeed"])
+            speech_speeds.append(np.mean(speech_speed))
             word_num = len(words_with_time)
             sentence = ""
             for i in range(word_num):
@@ -160,43 +168,13 @@ class DataHandler:
             % (seps.min(), seps.mean(), seps.max())
         )
         self.data["separated_text"] = seperated_text
+        self.data["speech_speed"] = speech_speeds
         # fig, subs = plt.subplots(2, 1)
         # subs[0].hist(seps, bins=10)
         #
         # subs[1].hist(seperated_len, bins=10)
         #
         # plt.show()
-
-    #
-    # def cal_bctr_avg(self, img=False):
-    #     data = self.data
-    #     bctr_avg = data.groupby(['advid'], as_index=True)['like_rate'].agg(['mean', 'std', 'count'])
-    #     bctr_avg = pd.DataFrame(bctr_avg)
-    #     bctr_avg.to_csv(config.grouped_data_file)
-    #     advid_bctr_dict = bctr_avg.to_dict(orient='index')
-    #     if img:
-    #         plt.hist(bctr_avg['mean'], bins=10)
-    #         plt.show()
-    #     advid_mean = []
-    #     advid_std = []
-    #     bctr_tag = []
-    #     removed_rows = []
-    #     for i, advid in enumerate(data['advid']):
-    #         grouped_data = advid_bctr_dict[advid]
-    #         if grouped_data['count'] < config.advid_threshold:
-    #             removed_rows.append(i)
-    #         else:
-    #             bctr = data['like_rate'][i]
-    #             bctr_mean = grouped_data['mean']
-    #             bctr_std = grouped_data['std']
-    #             advid_mean.append(bctr_mean)
-    #             advid_std.append(bctr_std)
-    #             bctr_tag.append((bctr - bctr_mean) / (bctr_std + 1e-10))
-    #     self.logger.info('%d data dropped due to advertiser cold start' % len(removed_rows))
-    #     self.data.drop(index=self.data.index[removed_rows], inplace=True)
-    #     self.data['like_tag'] = bctr_tag
-    #     self.data['bctr_mean'] = bctr_mean
-    #     self.data['bctr_std'] = bctr_std
 
     def store_data(self):
         self.data.to_csv(self.data_path)
@@ -214,40 +192,136 @@ class DataHandler:
     def check_data(self, data_id):
         data = self.data
         row_num = list(data["id"]).index(int(data_id))
-        print("https://constrain.adwetec.com/material/creative/video/" + data['file'][row_num])
+        print(
+            "https://constrain.adwetec.com/material/creative/video/"
+            + data["file"][row_num]
+        )
+        print(data.iloc[row_num])
 
     def build_sample(self, sample_number=1000):
         video_folder = config.video_folder
-        ids = list(map(lambda x: x.split('.')[0], os.listdir(video_folder)))
-        ids = list(filter(lambda x: not x.endswith('_origin'), ids))
+        ids = list(map(lambda x: x.split(".")[0], os.listdir(video_folder)))
+        ids = list(filter(lambda x: not x.endswith("_origin"), ids))
         ids = [int(id) for id in ids]
         sep = len(ids) // sample_number
         selected_ids = ids[::sep]
-        sample_data = self.data.loc[self.data['id'].isin(selected_ids)]
-        sample_file = os.path.join(config.this_folder, 'Data', 'sample', 'data.csv')
+        sample_data = self.data.loc[self.data["id"].isin(selected_ids)]
+        sample_file = os.path.join(config.this_folder, "Data", "sample", "data.csv")
         sample_data.to_csv(sample_file)
 
     def display_tags(self):
-        tags = np.array(self.data['tag'])
+        tags = np.array(self.data["tag"])
         bs = 1000
         nbt = len(tags) // bs
-        tag_pos = (tags==1)
+        tag_pos = tags == 1
         for i in range(nbt):
-            print(np.sum(tag_pos[i*bs:(i+1)*bs]) / bs)
+            print(np.sum(tag_pos[i * bs : (i + 1) * bs]) / bs)
 
+    def check_column(self, colname):
+        col_data = np.array(self.data[colname])
+        ids = np.array(self.data["id"])
+        print(ids[col_data == 1088])
+        val_dict = {}
+        for i in col_data:
+            try:
+                val_dict[i] += 1
+            except:
+                val_dict[i] = 1
+        print(val_dict)
+        print(col_data.mean(), col_data.max(), col_data.min(), col_data.std())
+
+    def group_similar_texts(self, process_number):
+        # self.data = self.data[0:100]
+        # self.data_len = 100
+
+        text = self.data["full_texts"]
+        cost = self.data["cost"]
+        group_ids = Array('i', np.zeros(self.data_len, dtype=int) - 1)
+        upload_time = self.data["kuaishou_feed_begin"]
+        relation_groups = []
+        group_number = Value('i', -1)
+
+        process_inds = []
+        for i in range(process_number):
+            process_inds.append(list(range(i, self.data_len, process_number)))
+        process_pool = []
+        lock = Lock()
+        for i in range(process_number):
+            p = Process(target=worker, args=(text, self.data_len, process_inds[i], group_ids, group_number, i, lock))
+            process_pool.append(p)
+            p.start()
+        for i in range(process_number):
+            process_pool[i].join()
+            # for j in range(process_number):
+            #     process_inds = compare_inds[each_len*j: each_len*j+each_len]
+            #     p = Process(target=worker, args=(text, t1, process_inds, group_ids, group_number))
+            #     process_pool.append(p)
+            #     p.start()
+            # for j in range(process_number):
+            #     process_pool[j].join()
+        group_number = group_number.value
+        for i in range(group_number+1):
+            relation_groups.append({})
+
+        for i in range(self.data_len):
+            time = datetime.datetime.strptime(upload_time[i], "%Y-%m-%d")
+            total_cost = cost[i]
+            relation_groups[group_number][time] = total_cost
+
+        for i in range(group_number + 1):
+            if len(relation_groups[i]) > 1:
+                sorted_upload = list(sorted(relation_groups[i].items(), key=lambda x: x[0]))
+                first_upload = sorted_upload[0][0]
+                for j in range(len(sorted_upload)):
+                    time_delta = sorted_upload[j][0] - first_upload
+                    sorted_upload[j] = (time_delta.days, sorted_upload[j][1])
+                relation_groups[i] = sorted_upload
+        self.logger.info("Total groups: %d" % (group_number + 1))
+        relation_groups = np.array(relation_groups, dtype=object)
+        np.save(os.path.join(self.data_folder, config.grouped_data_file), relation_groups)
+        self.data["group_id"] = group_ids
+
+
+def worker(data, data_len, indexes, group_ids, group_number, process_id, lock):
+    for num, i in enumerate(indexes):
+        if num % 100 == 0:
+            print("Process: %d Doing similarity check, at %d/%d, found groups %d" % (process_id, num, len(indexes), group_number.value + 1))
+        if group_ids[i] != -1:
+            continue
+        my_group = [i]
+        t1 = data[i]
+        for j in range(data_len):
+            if group_ids[j] != -1:
+                continue
+            t2 = data[j]
+            if similarity(t1, t2) > 0.9:
+                my_group.append(j)
+        if group_ids[i] != 1:
+            lock.acquire()
+            group_number.value += 1
+            for j in my_group:
+                group_ids[j] = group_number.value
+            lock.release()
 
 if __name__ == "__main__":
+    # data_handler = DataHandler(config.raw_data_file)
     data_handler = DataHandler(config.raw_data_file)
+    data_handler.group_similar_texts(8)
+    data_handler.store_data()
 
-    # data_handler.check_data(541132)
+    # data_handler.check_column("width")
+
+    # data_handler.check_data(126989)
+    # data_handler.check_data(100764)
 
     # data_handler.display_tags()
 
-    data_handler.seperate_text()
+    # data_handler.seperate_text()
 
-    data_handler.gen_tag(["cost"], 100)
-
+    # data_handler.gen_tag(["cost"], 100)
+    #
     # data_handler.store_data()
 
     # data_handler.build_sample(1000)
+
     # data_handler.relations_bctr_imp(img=False)

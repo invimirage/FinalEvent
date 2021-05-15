@@ -12,9 +12,61 @@ import config
 import subprocess
 import os
 import time
+from utils import *
+import cv2
+# from datetime import datetime
+# a = "2020-01-02"
+# b = "2021-01-02"
+# a = datetime.strptime(a, "%Y-%m-%d")
+# b = datetime.strptime(b, "%Y-%m-%d")
+# delta = a - b
+# print(delta.days)
+a = torch.tensor([1, 2, 3]).to("cuda:0")
+print(a[2:5])
+a = pd.DataFrame([[2, 3, 4], [2, 1, 1]], columns=['a', 'v', 'b'])
+b = pd.DataFrame([[2, 3,5], [2, 5, 1]], columns=['a', 'v', 'b'])
+print(pd.concat((a, b),axis=0, ignore_index=True))
+# videos = os.listdir(config.video_folder)
+# count = 0
+# for v in videos:
+#     vpath = os.path.join(config.video_folder, v)
+#     vc = cv2.VideoCapture(vpath)
+#     rval, _ = vc.read()
+#     if not rval:
+#         os.remove(vpath)
+# print(count)
 
-a = np.array([1, 2, 3 ,4])
-print(np.random.choice(a, 2, replace=False))
+# from difflib import SequenceMatcher#导入库
+# def similarity(a, b):
+#     return SequenceMatcher(lambda x: x in [" ", "，", "。"], a, b).ratio()#引用ratio方法，返回序列相似性的度量
+#
+# data = pd.read_csv(config.raw_data_file)
+# text = data["full_texts"]
+# tags = data["cost"]
+# ids = data['id']
+# total_len = len(text)
+# rela_count = [0] * 100
+# for i in range(100):
+#     t1 = text[i]
+#     print(t1)
+#     print(tags[i], ids[i])
+#     for j in range(i + 1, total_len):
+#         t2 = text[j]
+#         if similarity(t1, t2) > 0.9:
+#             print(t2)
+#             print(tags[j], ids[j])
+#             rela_count[i] += 1
+# print(rela_count)
+
+
+# def same(text1, text2):
+
+# data = pd.read_csv(config.raw_data_file)
+# print(data["upload_time"])
+# extra_features = parse_extra_features(data)
+# print(extra_features)
+# a = np.array([1, 2, 3 ,4])
+# print(np.random.choice(a, 2, replace=False))
 # res = pd.read_csv("results.csv")
 # pred = np.array(res['pred'])
 # tag = np.array(res['tag'])

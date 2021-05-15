@@ -20,7 +20,6 @@ from tqdm import tqdm
 import math
 
 # from torch.utils.data import *
-import pandas as pd
 import json
 import logging
 import torch.nn.utils.rnn as rnn
@@ -41,7 +40,7 @@ import os
 
 class TextScorer:
     def __init__(self, **kwargs):
-        self.logger = kwargs['logger']
+        self.logger = kwargs["logger"]
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         # self.device = "cpu"
         self.logger.info("Device: %s" % self.device)
@@ -49,7 +48,7 @@ class TextScorer:
         self.data_len = self.tag.shape[0]
         self.logger.info("Data length: %d" % self.data_len)
         self.model = kwargs["model"]
-        self.best_f1 = kwargs['f1']
+        self.best_f1 = kwargs["f1"]
         # assert kwargs["mode"] in ["local", "api"]
         # self.mode = kwargs['mode']
         # if kwargs["mode"] == "local":
@@ -78,18 +77,47 @@ class TextScorer:
 
         self.model.to(self.device)
 
-    def bert_embedding(self, bert_path, text_data):
+    def bert_embedding(
+        self,
+        bert_path,
+        text_data,
+        cls=False,
+        neighbor=0,
+        only_center=True,
+        max_concat_len=100,
+    ):
         tokenizer = BertTokenizer(
             vocab_file=os.path.join(bert_path, "vocab.txt")
         )  # 初始化分词器
 
         # 如果第一段文本有10小段，则记录为[0, 10]，该list元素数量比tag多1，tag[i]对应文本separate_points[i]:separates[i+1]
         separated_texts = []
+        centers = []
         separated_points = [0]
         max_text_length = 512
         for slices in text_data:
-            for text in slices:
-                separated_texts.append(text)
+            for i, text in enumerate(slices):
+                target_text = text
+                center_text = [1 for _ in range(len(text))]
+                for j in range(1, neighbor + 1):
+                    if (
+                        i - j >= 0
+                        and len(target_text) + len(slices[i - j]) <= max_concat_len
+                    ):
+                        target_text = slices[i - j] + target_text
+                        center_text = [
+                            0 for _ in range(len(slices[i - j]))
+                        ] + center_text
+                    if (
+                        i + j < len(slices)
+                        and len(target_text) + len(slices[i + j]) <= max_concat_len
+                    ):
+                        target_text = target_text + slices[i + j]
+                        center_text = center_text + [
+                            0 for _ in range(len(slices[i + j]))
+                        ]
+                centers.append(center_text)
+                separated_texts.append(target_text)
             separated_points.append(len(separated_texts))
 
         max_len = max([len(single) for single in separated_texts])  # 最大的句子长度
@@ -119,10 +147,12 @@ class TextScorer:
                 segments.append([0] * len(indexed_tokens))
                 input_masks.append([1] * len(indexed_tokens))
 
+            center_text_masks = centers[sta:end]
             max_len = max([len(single) for single in tokens])  # 最大的句子长度
 
             for j in range(len(tokens)):
                 padding = [0] * (max_len - len(tokens[j]))
+                center_text_masks[j] += padding
                 tokens[j] += padding
                 segments[j] += padding
                 input_masks[j] += padding
@@ -134,19 +164,32 @@ class TextScorer:
             tokens_tensor = torch.tensor(tokens).to(self.device)
             segments_tensors = torch.tensor(segments).to(self.device)
             input_masks_tensors = torch.tensor(input_masks).to(self.device)
+            center_text_masks = torch.tensor(input_masks).to(self.device)
 
-            output = bert_model(
-                tokens_tensor,
-                token_type_ids=segments_tensors,
-                attention_mask=input_masks_tensors,
-            )
+            with torch.no_grad():
+                output = bert_model(
+                    tokens_tensor,
+                    token_type_ids=segments_tensors,
+                    attention_mask=input_masks_tensors,
+                )
             last_encode = output[0]
-            output_mask = input_masks_tensors.unsqueeze(-1).repeat(
-                1, 1, last_encode.shape[-1]
+            if only_center:
+                output_mask = center_text_masks.unsqueeze(-1).repeat(
+                    1, 1, last_encode.shape[-1]
+                )
+            else:
+                output_mask = input_masks_tensors.unsqueeze(-1).repeat(
+                    1, 1, last_encode.shape[-1]
             )
             masked_output = last_encode * output_mask
             self.logger.debug(masked_output.shape)
-            pooled_output = torch.mean(masked_output, dim=1)
+            if cls:
+                if only_center:
+                    self.logger.fatal("Using centering and cls is wrong")
+                    exit(0)
+                pooled_output = masked_output[:, 0]
+            else:
+                pooled_output = torch.mean(masked_output, dim=1)
             self.logger.debug(pooled_output.shape)
             embed = pooled_output.cpu().detach().tolist()
             self.logger.debug(len(embed))
@@ -303,7 +346,6 @@ class TextScorer:
     #     df.to_csv(filepath, index=False)
 
     def run_model_separated_lstm(self, mode, kwargs):
-
         batch_size = kwargs["params"]["batch_size"]
         lr = kwargs["params"]["learning_rate"]
         training_size = kwargs["params"]["training_size"]
@@ -367,13 +409,25 @@ class TextScorer:
                     testing_preds = []
                     testing_losses = []
                     for batch_inds in train_batches:
-                        pred, loss = feed_model(text_embed_data, extra_feats, tags, batch_inds, requires_grad=False)
+                        pred, loss = feed_model(
+                            text_embed_data,
+                            extra_feats,
+                            tags,
+                            batch_inds,
+                            requires_grad=False,
+                        )
                         training_preds.append(pred)
                         training_losses.append(loss.unsqueeze(0))
                     pred_train = torch.cat(training_preds, dim=0)
                     train_loss = torch.mean(torch.cat(training_losses, dim=0))
                     for batch_inds in test_batches:
-                        pred, loss = feed_model(text_embed_data, extra_feats, tags, batch_inds, requires_grad=False)
+                        pred, loss = feed_model(
+                            text_embed_data,
+                            extra_feats,
+                            tags,
+                            batch_inds,
+                            requires_grad=False,
+                        )
                         testing_preds.append(pred)
                         testing_losses.append(loss.unsqueeze(0))
                     pred_test = torch.cat(testing_preds, dim=0)
@@ -395,8 +449,14 @@ class TextScorer:
                         best_epoch = epoch
                         if f1_mean > self.best_f1:
                             self.best_f1 = f1_mean
-                            save_the_best(self.model, f1_mean, kwargs['ids'], tags[test_inds], pred_test,
-                                          self.logger.name)
+                            save_the_best(
+                                self.model,
+                                f1_mean,
+                                kwargs["ids"],
+                                tags[test_inds],
+                                pred_test,
+                                self.logger.name,
+                            )
 
                     self.logger.info(
                         "Best Micro-F1: %.6lf, epoch %d" % (best_micro_f1, best_epoch)
@@ -404,7 +464,9 @@ class TextScorer:
                     if epoch - best_epoch > 10:
                         break
 
-                train_batches = build_batch(train_inds, batch_size, random_batching, tags)
+                train_batches = build_batch(
+                    train_inds, batch_size, random_batching, tags
+                )
                 for batch_inds in train_batches:
                     _, loss = feed_model(
                         text_embed_data, extra_feats, tags, batch_inds
@@ -435,7 +497,9 @@ class TextScorer:
         # 文本数据是分段的，需要构建模型输入数据，即input和seps
         def build_bert_input(text_data, max_text_length=100):
             tokens, segments, input_masks = [], [], []
-            tokenizer = BertTokenizer(vocab_file=os.path.join(bert_path, "vocab.txt"))  # 初始化分词器
+            tokenizer = BertTokenizer(
+                vocab_file=os.path.join(bert_path, "vocab.txt")
+            )  # 初始化分词器
             for text in text_data:
                 indexed_tokens = tokenizer.encode(text)  # 索引列表
                 if len(indexed_tokens) > max_text_length:
@@ -539,14 +603,23 @@ class TextScorer:
                         best_epoch = epoch
                         if f1_mean > self.best_f1:
                             self.best_f1 = f1_mean
-                            save_the_best(self.model, f1_mean, kwargs['ids'], tags[test_inds], pred_test, self.logger.name)
+                            save_the_best(
+                                self.model,
+                                f1_mean,
+                                kwargs["ids"],
+                                tags[test_inds],
+                                pred_test,
+                                self.logger.name,
+                            )
                     self.logger.info(
                         "Best Micro-F1: %.6lf, epoch %d" % (best_micro_f1, best_epoch)
                     )
                     if epoch - best_epoch > 10:
                         break
 
-                train_batches = build_batch(train_inds, batch_size, random_batching, tags)
+                train_batches = build_batch(
+                    train_inds, batch_size, random_batching, tags
+                )
                 for batch_inds in train_batches:
                     _, loss = feed_model(
                         bert_input, extra_feats, tags, batch_inds
@@ -618,6 +691,7 @@ def gen_correct_data(text_data, embeds):
 
 
 def main(model, logger, kwargs) -> None:
+    method_name = logger.name
     embed_type = kwargs["embed_type"]
     requires_embedding = model.requires_embed
     run_params = model.hyperparams["common"]
@@ -628,8 +702,12 @@ def main(model, logger, kwargs) -> None:
     tag_col = "tag"
     data = pd.read_csv(
         config.raw_data_file,
-        usecols=["id", "like", "clk", "separated_text", "advid", tag_col],
+        # usecols=["id", "like", "clk", "separated_text", "advid", tag_col],
     )
+    if kwargs.get("test_mode", False):
+        sep = len(data) // 200
+        data = data[::sep]
+        data.reset_index(inplace=True)
     # tag_data = np.array(data['bctr_tag'])
     tag_data = np.array(data[tag_col])
     # advid_avg_bctr = pd.read_csv('Data/kuaishou_data_0426/bctr_avg.csv')
@@ -670,46 +748,53 @@ def main(model, logger, kwargs) -> None:
     # tag_data = np.delete(tag_data, embed_data['dropped_ind'])
 
     text_data = data["separated_text"].apply(lambda text: json.loads(text))
-    # training_model = SeparatedLSTM(1024, 128, len(config.advids), 3, 32, 0.5)
-    # training_model = BertWithCNN(bert_path='../Models/Bert/', hidden_length=16, linear_hidden_length=32, extra_length=0, channels=3)
     # binned_data, cut_points = bin_tags(tag_data, config.bin_number)
     best_f1 = load_model(file_name=logger.name)
 
     scorer = TextScorer(
-        tag=tag_data,
-        mode=embed_type,
-        logger=logger,
-        model=model,
-        f1=best_f1
+        tag=tag_data, mode=embed_type, logger=logger, model=model, f1=best_f1
     )
 
     if requires_embedding:
-        try:
-            embed_data = np.load(config.embed_data_file, allow_pickle=True).tolist()
-            embed_data = gen_correct_data(text_data, embed_data)
-            # embed_data = [embed_data[i] for i in range(len(embed_data)) if i not in removed_indexes]
-        except:
-            print("Text embedding not found! Now doing embedding")
-            embed = scorer.bert_embedding(config.bert_path, text_data)
-            embed_cache = np.array(embed, dtype=object)
-            np.save(
-                os.path.join(config.data_folder, config.embed_data_file), embed_cache
+        embed_file_path = config.embed_data_file + f"_{method_name}.npy"
+        if kwargs["force_embed"]:
+            print("Re embedding")
+            embed = scorer.bert_embedding(
+                config.bert_path,
+                text_data,
+                kwargs.get("use_cls", False),
+                kwargs.get("neighbor", 0),
+                kwargs.get("only_center", False),
+                kwargs.get("max_len", 100),
             )
+            embed_cache = np.array(embed, dtype=object)
+            del embed
+            np.save(embed_file_path, embed_cache)
             embed_data = embed_cache.tolist()
-        finally:
+            del embed_cache
             scorer.set_data(embed_data)
+        else:
+            try:
+                embed_data = np.load(embed_file_path, allow_pickle=True).tolist()
+                embed_data = gen_correct_data(text_data, embed_data)
+                # embed_data = [embed_data[i] for i in range(len(embed_data)) if i not in removed_indexes]
+            except:
+                print("Text embedding not found! Now doing embedding")
+                embed = scorer.bert_embedding(
+                    config.bert_path,
+                    text_data,
+                    kwargs.get("use_cls", False),
+                    kwargs.get("neighbor", 0),
+                    kwargs.get("only_center", False),
+                    kwargs.get("max_len", 100),
+                )
+                embed_cache = np.array(embed, dtype=object)
+                np.save(embed_file_path, embed_cache)
+                embed_data = embed_cache.tolist()
+            finally:
+                scorer.set_data(embed_data)
 
-    advid_onehot = []
-    one_hot_len = len(config.advids)
-    advid_dict = {k: v for v, k in enumerate(config.advids)}
-    for i in range(scorer.data_len):
-        advid = data["advid"][i]
-        try:
-            idx = advid_dict[str(advid)]
-            one_hot = np.eye(one_hot_len, dtype=int)[idx]
-        except KeyError:
-            one_hot = np.zeros(one_hot_len, dtype=int)
-        advid_onehot.append(one_hot)
+    extra_features = parse_extra_features(data)
 
     # 我觉得过一段时间就很难看懂了，不过还是很帅
     # process_mark = np.concatenate(
@@ -724,19 +809,32 @@ def main(model, logger, kwargs) -> None:
 
     scorer.run_model(
         mode="train",
-        extra_features=advid_onehot,
+        extra_features=extra_features,
         ids=id,
         text=text_data,
         params=run_params,
     )
+
 
 if __name__ == "__main__":
     # data_source raw embed
     # embed_type local api
     with open(config.parameter_file) as f:
         params = json.load(f)
-    logger = init_logger(log_level=logging.INFO, name='BertWithCNN_with_advid', write_to_file=True, clean_up=True)
-    adjust_hyperparams(logger, params, sample_number=10, model_name='BertWithCNN', run_model=main, embed_type="local")
+    logger = init_logger(
+        log_level=logging.INFO,
+        name="BertWithCNN_with_advid",
+        write_to_file=True,
+        clean_up=True,
+    )
+    adjust_hyperparams(
+        logger,
+        params,
+        sample_number=10,
+        model_name="BertWithCNN",
+        run_model=main,
+        embed_type="local",
+    )
     # if model_name == 'SeparatedLSTM':
     #     model = SeparatedLSTM(
     #         input_length=1024, extra_length=len(config.advids), hyperparams=params[model_name]

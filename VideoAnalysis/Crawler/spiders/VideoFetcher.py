@@ -2,7 +2,8 @@ import scrapy
 import pandas as pd
 import os
 import sys
-sys.path.append(r'P:\PycharmProjects\FinalEvent\FinalEvent')
+
+sys.path.append(r"P:\PycharmProjects\FinalEvent\FinalEvent")
 import subprocess
 import config
 from scrapy.cmdline import execute
@@ -19,7 +20,7 @@ class VideoFetcher(scrapy.Spider):
         encoding="utf-8",
     )
     video_folder = config.video_folder
-    video_temp_folder = r'C:\Users\月亮上的珠珠\Desktop\temp'
+    video_temp_folder = r"C:\Users\zrf19\Desktop\temp"
     video_list = list(filter(lambda x: x[-4:] == ".mp4", os.listdir(video_folder)))
     ids_already = list(map(lambda x: x.split(".")[0], video_list))
     video_dict = {}
@@ -47,12 +48,25 @@ class VideoFetcher(scrapy.Spider):
 
     def parse(self, response):
         video_name = self.video_dict[str(response.url)]
-        video_local_path = os.path.join(self.video_temp_folder, video_name + '_origin.mp4')
-        video_target_path = os.path.join(self.video_folder, video_name + '.mp4')
+        video_local_path = os.path.join(
+            self.video_temp_folder, video_name + "_origin.mp4"
+        )
+        video_target_path = os.path.join(self.video_folder, video_name + ".mp4")
         with open(video_local_path, "wb") as f:
             f.write(response.body)
         width, height = self.get_vedio_height_width(video_local_path)
-        trans = r'ffmpeg -y  -i "%s" -r 5 -vf scale=%d:%d -map 0:0 "%s"' % (video_local_path, width, height, video_target_path)
+        # trans = r'ffmpeg -y  -i "%s" -r 5 -vf scale=%d:%d -map 0:0 "%s"' % (
+        #     video_local_path,
+        #     width,
+        #     height,
+        #     video_target_path,
+        # )
+        trans = r'ffmpeg -y  -i "%s" -r 5 -vf scale=%d:%d "%s"' % (
+            video_local_path,
+            width,
+            height,
+            video_target_path,
+        )
         pipeline = subprocess.Popen(
             trans, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
         )

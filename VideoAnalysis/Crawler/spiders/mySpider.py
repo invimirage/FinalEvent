@@ -1,7 +1,8 @@
 import scrapy
 import pandas as pd
 import os, sys
-sys.path.append(r'P:\PycharmProjects\FinalEvent\FinalEvent')
+
+sys.path.append(r"P:\PycharmProjects\FinalEvent\FinalEvent")
 import config
 
 # 还没想好要爬什么，现在只需要首帧

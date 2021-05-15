@@ -1,12 +1,12 @@
 #!/usr/bin/env python
 # encoding: utf-8
-'''
+"""
 @author: zhangruifeng
 @contact: zrf1999@pku.edu.cn
 @file: draw_graph.py
 @time: 2021/5/10 15:37
 @github: local 16351726fa15c85f565b7d5fecdf320ea67a72ef
-'''
+"""
 from utils import *
 import logging
 import config
@@ -17,13 +17,12 @@ import json
 import re
 from basic_data_handler import DataHandler
 
+
 class DataShower(DataHandler):
     def __init__(self, file_path, log_level):
         super().__init__(file_path, log_level)
         self.data = pd.read_csv(file_path)
         self.graph_prefix = "Data_"
-
-
 
 
 class ModelResults:
@@ -33,7 +32,7 @@ class ModelResults:
 
     # 加载文件，并选出f1最好的一次测试
     def get_best_test(self):
-        with open(self.log_file, 'r') as f:
+        with open(self.log_file, "r") as f:
             lines = f.readlines()
 
         best_lines = []
@@ -41,7 +40,7 @@ class ModelResults:
         sample_lines = []
         best_f1_a_sample = 0
         for line in lines:
-            line = line.strip('\n')
+            line = line.strip("\n")
             if "Best Micro-F1" in line:
                 sta = line.index("Best Micro-F1: ") + len("Best Micro-F1: ")
                 end = line.index(", epoch")
@@ -67,7 +66,7 @@ class ModelResults:
         test_losses = []
         test_loss_ind = -1
         for i, line in enumerate(best_lines):
-            line = line.strip('\n')
+            line = line.strip("\n")
             if "Running sample" in line:
                 after_which = "with parameters: "
                 start_index = line.index(after_which) + len(after_which)
@@ -87,13 +86,17 @@ class ModelResults:
                 start_index = line.index("Loss: ") + len("Loss: ")
                 test_losses.append(float(line[start_index:]))
             if i == train_f1_ind:
-                pattern = r'[[](.*?)[]]'
-                f1s = list(filter(lambda x: x != '', re.findall(pattern, line)[0].split(' ')))
+                pattern = r"[[](.*?)[]]"
+                f1s = list(
+                    filter(lambda x: x != "", re.findall(pattern, line)[0].split(" "))
+                )
                 f1s = np.array(f1s, dtype=float)
                 train_f1s.append(f1s.mean())
             if i == test_f1_ind:
-                pattern = r'[[](.*?)[]]'
-                f1s = list(filter(lambda x: x != '', re.findall(pattern, line)[0].split(' ')))
+                pattern = r"[[](.*?)[]]"
+                f1s = list(
+                    filter(lambda x: x != "", re.findall(pattern, line)[0].split(" "))
+                )
                 f1s = np.array(f1s, dtype=float)
                 test_f1s.append(f1s.mean())
         epoch_data["train_f1"] = train_f1s
@@ -101,6 +104,7 @@ class ModelResults:
         epoch_data["train_loss"] = train_losses
         epoch_data["test_loss"] = test_losses
         return epoch_data
+
 
 if __name__ == "__main__":
     log_parser = ModelResults("log_SeparatedLSTM_without_advid", log_level=logging.INFO)

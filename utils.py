@@ -69,6 +69,8 @@ from collections import Iterable
 from copy import deepcopy
 
 number = 0
+
+
 def sample_hyperparams(model_params, sample_list, test_params: dict) -> list:
     global number
     if len(test_params) == 0:
@@ -87,9 +89,7 @@ def sample_hyperparams(model_params, sample_list, test_params: dict) -> list:
                 model_params["common"][param_name] = param
             other_params = deepcopy(test_params)
             del other_params[param_name]
-            results = sample_hyperparams(
-                model_params, sample_list, other_params
-            )
+            results = sample_hyperparams(model_params, sample_list, other_params)
             if len(results) > 0:
                 sample_parameters.extend(results)
         break
@@ -105,16 +105,20 @@ def adjust_hyperparams(logger, params, sample_number, model_name, run_model, **k
         lr_low = 5
         step = (lr_high - lr_low) / (lr_seps - 1)
         lrs = 10 ** (-(np.arange(lr_low, lr_high, step)))
-        all_params = {
-            "hidden_length": [128, 256, 512],
-            "layer_number": [1, 2, 3],
-            "linear_hidden_length": [64, 128],
-            "drop_out_rate": [0.5, 0.6],
-            "batch_size": [400, 600, 800],
-            "learning_rate": 1e-4,
-            "training_size": 0.8,
-            "number_epochs": 100
-        }
+
+        all_params = kwargs.get(
+            "test_params",
+            {
+                "hidden_length": [128, 256, 512],
+                "layer_number": [1, 2, 3],
+                "linear_hidden_length": [64, 128],
+                "drop_out_rate": [0.5, 0.6],
+                "batch_size": [400, 600, 800],
+                "learning_rate": 1e-4,
+                "training_size": 0.8,
+                "number_epochs": 100,
+            },
+        )
     elif model_name == "BertWithCNN":
         # 调试cnn
         lr_high = 2
@@ -122,43 +126,77 @@ def adjust_hyperparams(logger, params, sample_number, model_name, run_model, **k
         lr_low = 5
         step = (lr_high - lr_low) / (lr_seps - 1)
         lrs = 10 ** (-(np.arange(lr_low, lr_high, step)))
-        all_params = {
-            "hidden_length": [32, 16, 8],
-            "linear_hidden_length": [32, 64, 128],
-            # "grad_layer_name": "encoder.layer.23.attention.self.query.weight",
-            "drop_out_rate": 0.5,
-            "channels": [16, 32, 64],
-            "batch_size": [50, 100, 150],
-            "learning_rate": 1e-4,
-            "training_size": 0.8,
-            "number_epochs": 100
-        }
-    elif model_name == 'VideoNet':
+        all_params = kwargs.get(
+            "test_params",
+            {
+                "hidden_length": [32, 16, 8],
+                "linear_hidden_length": [32, 64, 128],
+                # "grad_layer_name": "encoder.layer.23.attention.self.query.weight",
+                "drop_out_rate": 0.5,
+                "channels": [16, 32, 64],
+                "batch_size": [50, 100, 150],
+                "learning_rate": 1e-4,
+                "training_size": 0.8,
+                "number_epochs": 100,
+            },
+        )
+    elif model_name == "VideoNet":
         lr_high = 2
         lr_seps = 10
         lr_low = 5
         step = (lr_high - lr_low) / (lr_seps - 1)
         lrs = 10 ** (-(np.arange(lr_low, lr_high, step)))
-        all_params = {
-            "frame_rate": 1,
-            "input_length": 512,
-            "pic_linear_hidden_length": 1024,
-            "pic_grad_layer_name": "aaa_blocks.31",
-            "pic_drop_out_rate": [0.5, 0.3, 0.6],
-            "pic_channels": 3,
-            "layer_number": 3,
-            "hidden_length": 512,
-            "linear_hidden_length": 128,
-            "drop_out_rate": 0.5,
-            "batch_size": 400,
-            "learning_rate": lrs,
-            "training_size": 0.8,
-            "number_epochs": 100,
-            "random": 1
-        }
+        all_params = kwargs.get(
+            "test_params",
+            {
+                "frame_rate": 1,
+                "input_length": 512,
+                "pic_linear_hidden_length": 1024,
+                "pic_grad_layer_name": "aaa_blocks.31",
+                "pic_drop_out_rate": [0.5, 0.3, 0.6],
+                "pic_channels": 3,
+                "layer_number": 3,
+                "hidden_length": 512,
+                "linear_hidden_length": 128,
+                "drop_out_rate": 0.5,
+                "batch_size": 400,
+                "learning_rate": lrs,
+                "training_size": 0.8,
+                "number_epochs": 100,
+                "random": 1,
+            },
+        )
+    elif model_name == "VideoNetEmbed":
+        lr_high = 2
+        lr_seps = 10
+        lr_low = 5
+        step = (lr_high - lr_low) / (lr_seps - 1)
+        lrs = 10 ** (-(np.arange(lr_low, lr_high, step)))
+        all_params = kwargs.get(
+            "test_params",
+            {
+                "frame_rate": 1,
+                "input_length": 512,
+                "pic_linear_hidden_length": 1024,
+                "pic_grad_layer_name": "aaa_blocks.31",
+                "pic_drop_out_rate": [0.5, 0.3, 0.6],
+                "pic_channels": 3,
+                "layer_number": 3,
+                "hidden_length": 512,
+                "linear_hidden_length": 128,
+                "drop_out_rate": 0.5,
+                "batch_size": 400,
+                "learning_rate": lrs,
+                "training_size": 0.8,
+                "number_epochs": 100,
+                "random": 1,
+            },
+        )
     params_to_test = {}
     for param in all_params:
-        if isinstance(all_params[param], Iterable) and not isinstance(all_params[param], str):
+        if isinstance(all_params[param], Iterable) and not isinstance(
+            all_params[param], str
+        ):
             params_to_test[param] = all_params[param]
     samples = sample_number
     total_test_cases = 1
@@ -180,15 +218,28 @@ def adjust_hyperparams(logger, params, sample_number, model_name, run_model, **k
     )
     for i, model_param in enumerate(sample_params):
         logger.info("Running sample {}, with parameters: {}".format(i, model_param))
-        if model_name == 'SeparatedLSTM':
+        if model_name == "SeparatedLSTM":
             model = SeparatedLSTM(
-                input_length=1024, extra_length=len(config.advids), hyperparams=params[model_name]
+                input_length=1024,
+                extra_length=config.extra_feat_length,
+                hyperparams=params[model_name],
             )
-        elif model_name == 'BertWithCNN':
-            model = BertWithCNN(bert_path=config.bert_path, extra_length=len(config.advids), hyperparams=params[model_name])
-        elif model_name == 'VideoNet':
-            model = VideoNet(extra_length=config.extra_feat_length, hyperparams=params[model_name])
+        elif model_name == "BertWithCNN":
+            model = BertWithCNN(
+                bert_path=config.bert_path,
+                extra_length=config.extra_feat_length,
+                hyperparams=params[model_name],
+            )
+        elif model_name == "VideoNet":
+            model = VideoNet(
+                extra_length=config.extra_feat_length, hyperparams=params[model_name]
+            )
+        elif model_name == "VideoNetEmbed":
+            model = VideoNetEmbed(
+                extra_length=config.extra_feat_length, hyperparams=params[model_name]
+            )
         run_model(model=model, logger=logger, kwargs=kwargs)
+
 
 def output_logs(self, epoch, kwargs: dict, *args):
     train_pred, train_loss, train_inds, test_pred, test_loss, test_inds = args
@@ -229,14 +280,23 @@ def output_logs(self, epoch, kwargs: dict, *args):
     f1_mean = np.mean(f_class)
     return f1_mean
 
+
 # 用于划分测试集和训练集
 def sep_train_test(data_length, tag_data, training_size):
     data_indexes = np.arange(data_length)
     tag_data_numpy = tag_data.numpy()
-    train_inds, test_inds, _, _ = train_test_split(data_indexes, tag_data_numpy, test_size=1-training_size)
+    train_inds, test_inds, _, _ = train_test_split(
+        data_indexes, tag_data_numpy, test_size=1 - training_size
+    )
     return train_inds, test_inds
 
-def build_batch(data_indexes:np.ndarray, batch_size:int, random=True, tag_data:torch.tensor=None):
+
+def build_batch(
+    data_indexes: np.ndarray,
+    batch_size: int,
+    random=True,
+    tag_data: torch.tensor = None,
+):
     bin_number = config.bin_number
     n_batch = math.ceil(len(data_indexes) / batch_size)
     batch_data = []
@@ -251,7 +311,10 @@ def build_batch(data_indexes:np.ndarray, batch_size:int, random=True, tag_data:t
             indexes_in_bins.append(data_indexes[tag_data == i])
             # print(len(indexes_in_bins[i]))
         for i in range(n_batch):
-            this_batch_data = [np.random.choice(indexes_in_bins[j], each_batch_size, replace=False) for j in range(bin_number)]
+            this_batch_data = [
+                np.random.choice(indexes_in_bins[j], each_batch_size, replace=False)
+                for j in range(bin_number)
+            ]
             this_batch_data = np.concatenate(this_batch_data, axis=0)
             batch_data.append(this_batch_data)
     else:
@@ -262,15 +325,22 @@ def build_batch(data_indexes:np.ndarray, batch_size:int, random=True, tag_data:t
             batch_data.append(data_indexes[sta:end])
     return batch_data
 
+
 def save_the_best(model, f1, id, tag, pred, file_name):
     print(f"Saving model, F1 {f1}")
-    save_path = os.path.join(config.model_save_path, file_name + '.pth')
-    save_dict = {"model": model.state_dict(), "f1": f1, 'id': np.array(id),
-                 'pred': pred.cpu().detach().numpy()[:, -1], 'tag': tag.cpu().detach().numpy()}
+    save_path = os.path.join(config.model_save_path, file_name + ".pth")
+    save_dict = {
+        "model": model.state_dict(),
+        "f1": f1,
+        "id": np.array(id),
+        "pred": pred.cpu().detach().numpy()[:, -1],
+        "tag": tag.cpu().detach().numpy(),
+    }
     torch.save(save_dict, save_path, _use_new_zipfile_serialization=False)
 
+
 def load_model(file_name, model=None, info=False):
-    model_path = os.path.join(config.model_save_path, file_name + '.pth')
+    model_path = os.path.join(config.model_save_path, file_name + ".pth")
     try:
         checkpoint = torch.load(model_path)
     except:
@@ -281,12 +351,61 @@ def load_model(file_name, model=None, info=False):
     if not info:
         return f1
     else:
-        id = checkpoint['id']
-        pred = checkpoint['pred']
-        tag = checkpoint['tag']
+        id = checkpoint["id"]
+        pred = checkpoint["pred"]
+        tag = checkpoint["tag"]
         return f1, id, pred, tag
 
+
+def normalization(data: np.ndarray, method="mean-std-sigmoid"):
+    assert method in ["min-max", "mean-std-sigmoid"]
+    if method == "min-max":
+        data = (data - data.min()) / (data.max() - data.min())
+    else:
+        data = (data - data.mean()) / data.std()
+        data = 1 / (1 + np.exp(-data))
+    return data
+
+
 # 生成除视频、文本特征以外的特征
-# def parse_extra_features(data:pd.DataFrame):
+def parse_extra_features(data: pd.DataFrame):
+    duration = np.array(data["duration"])
+    text_len = np.array([len(text) for text in list(data["full_texts"])])
+    height = np.array(data["height"])
+    width = np.array(data["width"])
+    speech_speed = np.array(data["speech_speed"])
+    # print(speech_speed.mean(), speech_speed.max(), speech_speed.min())
+    is_vertical = np.array(height > width, dtype=int)
+    # print(np.sum(is_vertical==1), np.sum(is_vertical==0))
+    is_high_defination = (height * is_vertical + width * (1 - is_vertical)) >= 1920
+    is_high_defination = np.array(is_high_defination, dtype=int)
+    # print(np.sum(is_high_defination == 1), np.sum(is_high_defination == 0))
+    duration = normalization(duration)
+    text_len = normalization(text_len)
+    speech_speed = normalization(speech_speed)
+    advid_onehot = []
+    one_hot_len = len(config.advids)
+    advid_dict = {k: v for v, k in enumerate(config.advids)}
+    for advid in data["advid"]:
+        try:
+            idx = advid_dict[str(advid)]
+            one_hot = np.eye(one_hot_len, dtype=int)[idx]
+        except KeyError:
+            one_hot = np.zeros(one_hot_len, dtype=int)
+        advid_onehot.append(one_hot)
+    advid_onehot = np.array(advid_onehot)
+    extra_features = np.column_stack(
+        (
+            is_high_defination,
+            is_vertical,
+            duration,
+            text_len,
+            speech_speed,
+            advid_onehot,
+        )
+    )
+    return extra_features
 
-
+from difflib import SequenceMatcher#导入库
+def similarity(a, b):
+    return SequenceMatcher(lambda x: x in [" ", "，", "。"], a, b).quick_ratio()#引用ratio方法，返回序列相似性的度量

@@ -22,7 +22,7 @@ from utils import *
 
 class DataFetcher:
     def __init__(self, data_path="Data/Data", **kwargs):
-        self.logger = init_logger(kwargs["log_level"])
+        self.logger = init_logger(kwargs["log_level"], name="DataFetcher")
         self.data_folder = config.data_folder
         self.logger.debug("folder : %s" % self.data_folder)
         if kwargs["from_db"]:
@@ -90,7 +90,9 @@ class DataFetcher:
             # 目前只搞快手
             self.get_es_data(kuaishou_data["id"])
 
-        self.data.to_csv(os.path.join(self.data_folder, kwargs["target_file_name"]), index=False)
+        self.data.to_csv(
+            os.path.join(self.data_folder, kwargs["target_file_name"]), index=False
+        )
 
     def get_data_from_db(self):
         # 打开数据库连接
@@ -149,6 +151,8 @@ class DataFetcher:
     # 从es中获取额外数据
     def get_es_data(self, ids):
         matids = list(ids)
+        batch_size = 10000
+        n_batch = math.ceil(len(matids) / batch_size)
         # 连接ES
         es = Elasticsearch(
             [
@@ -176,69 +180,84 @@ class DataFetcher:
             "block": "block",
             "negative": "negative",
             "paly3s": "play3s",
+            "upload_time": "vtime",
         }
         aggs = {}
         for agg_field, target in agg_fields.items():
-            aggs[agg_field] = {"sum": {"field": target}}
-        query = {
-            "size": 1,
-            "_source": {"includes": ["matid", "date", "vtime"]},
-            "aggs": {
-                agg_name: {
-                    "terms": {
-                        "size": len(matids),
-                        "script": "doc['matid'].value +','+doc['advid'].value",
-                        "order": {"cost": "desc"},
-                    },
-                    "aggs": aggs,
-                }
-            },
-            "query": {
-                "bool": {
-                    "must": [
-                        {"terms": {"matid": matids}},
-                        {"term": {"medid": 8}},
-                        {
-                            "script": {
-                                "script": {
-                                    "source": "doc['date'].value.toInstant().toEpochMilli() - "
-                                    "doc['vtime'].value.toInstant().toEpochMilli() <= params.aMonth",
-                                    "params": {
-                                        "aMonth": 2592000000,
-                                        "aWeek": 604800000,
-                                    },
-                                }
-                            }
+            if agg_field != "upload_time":
+                aggs[agg_field] = {"sum": {"field": target}}
+            else:
+                aggs["upload_time"] = {"min": {"field": "vtime"}}
+        es_dataframe = []
+        for i in range(n_batch):
+            sta = i * batch_size
+            end = (i + 1) * batch_size
+            matids_this_batch = matids[sta:end]
+            query = {
+                "size": 1,
+                "_source": {"includes": ["matid", "date", "vtime"]},
+                "aggs": {
+                    agg_name: {
+                        "terms": {
+                            "size": len(matids),
+                            "script": "doc['matid'].value +','+doc['advid'].value",
+                            "order": {"cost": "desc"},
                         },
-                    ],
-                    "filter": {"range": {"vtime": {"lte": "now-30d/d"}}},
-                }
-            },
-            "sort": [{"date": {"order": "desc"}}],
-        }
-        self.logger.info("Collecting es data...")
-        self.logger.debug(query)
-        result = es.search(index="creative-report-*", body=query)
-        self.logger.debug(result["_shards"])
-        self.logger.debug(result["hits"]["hits"][0])
-        sale_data = result["aggregations"][agg_name]["buckets"]
-        self.logger.debug(
-            "Bucket length: %d, id length %d" % (len(sale_data), len(matids))
-        )
-        es_data = []
-        for dta in sale_data:
-            id, advid = dta["key"].split(",")
-            this_data = [id, advid]
-            for field in agg_fields:
-                this_data.append(dta[field]["value"])
-            es_data.append(this_data)
+                        "aggs": aggs,
+                    }
+                },
+                "query": {
+                    "bool": {
+                        "must": [
+                            {"terms": {"matid": matids_this_batch}},
+                            {"term": {"medid": 8}},
+                            {
+                                "script": {
+                                    "script": {
+                                        "source": "doc['date'].value.toInstant().toEpochMilli() - "
+                                        "doc['vtime'].value.toInstant().toEpochMilli() <= params.aMonth",
+                                        "params": {
+                                            "aMonth": 2592000000,
+                                            "aWeek": 604800000,
+                                        },
+                                    }
+                                }
+                            },
+                        ],
+                        "filter": {"range": {"vtime": {"lte": "now-30d/d"}}},
+                    }
+                },
+                "sort": [{"date": {"order": "desc"}}],
+            }
+            self.logger.info("Collecting es data, batch %d/%d" % (i, n_batch))
+            self.logger.debug(query)
+            result = es.search(index="creative-report-*", body=query)
+            self.logger.debug(result["_shards"])
+            # self.logger.debug(result["hits"]["hits"][0])
+            sale_data = result["aggregations"][agg_name]["buckets"]
+            self.logger.debug(
+                "Bucket length: %d, id length %d" % (len(sale_data), len(matids))
+            )
+            es_data = []
+            upload_time = []
+            for dta in sale_data:
+                id, advid = dta["key"].split(",")
+                this_data = [id, advid]
+                for field in agg_fields:
+                    if field != "upload_time":
+                        this_data.append(dta[field]["value"])
+                    else:
+                        upload_time.append(dta[field]["value_as_string"].split('T')[0])
+                es_data.append(this_data)
 
-        # 包含没有es数据和es数据量太少的
-        es_data = np.array(es_data, dtype=int)
-        es_dataframe = pd.DataFrame(
-            data=es_data, columns=["id", "advid"] + list(agg_fields.keys())
-        )
-
+            # 包含没有es数据和es数据量太少的
+            es_data = np.array(es_data, dtype=int)
+            es_dataframe_this_batch = pd.DataFrame(
+                data=es_data, columns=["id", "advid"] + [key for key in agg_fields.keys() if key != "upload_time"]
+            )
+            es_dataframe_this_batch["upload_time"] = upload_time
+            es_dataframe.append(es_dataframe_this_batch)
+        es_dataframe = pd.concat(es_dataframe, axis=0, ignore_index=True)
         db_dataframe = self.data.set_index("id")
         # print(es_dataframe.head(), db_dataframe.head())
         merged_data = es_dataframe.join(db_dataframe, on="id", lsuffix="_db")
@@ -272,7 +291,7 @@ if __name__ == "__main__":
         target_file_name=config.raw_data_file,
         es=True,
         analyze=False,
-        from_db=True,
+        from_db=False,
         log_level=logging.INFO,
     )
 

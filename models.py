@@ -22,6 +22,7 @@ from efficientnet_pytorch import EfficientNet
 import math
 import torch.nn.utils.rnn as rnn
 from utils import *
+
 # ——————构造模型——————
 
 
@@ -167,7 +168,9 @@ class SeparatedLSTM(MyModule):
         # print(text_data)
         lstm_out, (hn, cn) = self.lstm(text_data)
         hn_batch_first = torch.transpose(hn, 0, 1).contiguous()
-        fc_input = torch.cat((hn_batch_first.view(hn_batch_first.shape[0], -1), extra_data), dim=1)
+        fc_input = torch.cat(
+            (hn_batch_first.view(hn_batch_first.shape[0], -1), extra_data), dim=1
+        )
         # fc_input = hn_batch_first.view(hn_batch_first.shape[0], -1)
         output = self.fc(fc_input)
         out_probs = F.softmax(output, dim=1).detach()
@@ -300,14 +303,16 @@ class JudgeNet(nn.Module):
 
 class PictureNet(MyModule):
     def __init__(self, hyperparameters, out_dims=config.bin_number, extra_length=0):
-        super().__init__(name="PictureNet", requires_embed=False, hyperparams=hyperparameters)
+        super().__init__(
+            name="PictureNet", requires_embed=False, hyperparams=hyperparameters
+        )
         linear_hidden_length = hyperparameters["linear_hidden_length"]
         self.ec_model = EfficientNet.from_name("efficientnet-b4")
         net_weight = torch.load(
             os.path.join(config.efficient_path, "efficientnet-b4-6ed6700e.pth")
         )
         self.ec_model.load_state_dict(net_weight)
-        self.grad_layer_name = hyperparameters['grad_layer_name']
+        self.grad_layer_name = hyperparameters["grad_layer_name"]
         grad = False
         for name, param in self.ec_model.named_parameters():
             if self.grad_layer_name in name:
@@ -317,8 +322,8 @@ class PictureNet(MyModule):
         self.fcs = nn.Sequential(
             nn.Linear(feature_num + extra_length, linear_hidden_length),
             nn.ReLU(),
-            nn.Dropout(hyperparameters['drop_out_rate']),
-            nn.Linear(linear_hidden_length, out_dims)
+            nn.Dropout(hyperparameters["drop_out_rate"]),
+            nn.Linear(linear_hidden_length, out_dims),
         )
         #     in_features=feature_num, out_features=out_dims, bias=True
         # )
@@ -352,14 +357,67 @@ class PictureNet(MyModule):
         return out_probs, loss
         # print(output.shape)
 
+class VideoNetEmbed(MyModule):
+    def __init__(self, extra_length, hyperparams):
+        super().__init__(name="VideoNetEmbed", requires_embed=True, hyperparams=hyperparams)
+        input_length = hyperparams["input_length"]
+        hidden_length = hyperparams["hidden_length"]
+        layer_number = hyperparams["layer_number"]
+        linear_hidden_length = hyperparams["linear_hidden_length"]
+        drop_out_rate = hyperparams["drop_out_rate"]
+        self.lstm = nn.LSTM(
+            input_size=input_length,
+            hidden_size=hyperparams["hidden_length"],
+            num_layers=hyperparams["layer_number"],
+            batch_first=True,
+            dropout=hyperparams["drop_out_rate"],
+        )
+        self.fc = nn.Sequential(
+            nn.Linear(
+                hidden_length * layer_number + extra_length, linear_hidden_length
+            ),
+            nn.ReLU(),
+            nn.Dropout(drop_out_rate),
+            nn.Linear(linear_hidden_length, config.bin_number),
+        )
+
+    # input为batch_size个list，每个list包含对应的视频帧数据，数据为cpu上的tensor
+    def forward(
+        self, video_input, extra_feats, tag=None):
+        lengths = []
+        for i in range(len(video_input)):
+            lengths.append(video_input[i].shape[0])
+        # print(len(video_data_input))
+        # for i in video_data_input:
+        #     print(i.shape)
+        input_padded = rnn.pad_sequence(video_input, batch_first=True)
+        input_packed = rnn.pack_padded_sequence(
+            input_padded, lengths=lengths, batch_first=True, enforce_sorted=False
+        )
+        lstm_out, (hn, cn) = self.lstm(input_packed)
+        hn_batch_first = torch.transpose(hn, 0, 1).contiguous()
+        fc_input = torch.cat(
+            (hn_batch_first.view(hn_batch_first.shape[0], -1), extra_feats), dim=1
+        )
+        # fc_input = hn_batch_first.view(hn_batch_first.shape[0], -1)
+        output = self.fc(fc_input)
+        out_probs = F.softmax(output, dim=1).detach()
+        # print(tag)
+        if tag is not None:
+            criterion = nn.CrossEntropyLoss()
+            loss = criterion(output, tag)
+        else:
+            loss = 0
+        return out_probs, loss
+
 class VideoNet(MyModule):
-    def __init__(self, extra_length,  hyperparams):
+    def __init__(self, extra_length, hyperparams):
         super().__init__(name="VideoNet", requires_embed=False, hyperparams=hyperparams)
         input_length = hyperparams["input_length"]
         pic_params = {}
         for key, param in hyperparams.items():
-            if key.startswith('pic_'):
-                pic_params[key.lstrip('pic_')] = param
+            if key.startswith("pic_"):
+                pic_params[key.lstrip("pic_")] = param
         self.img_net = PictureNet(pic_params, out_dims=input_length, extra_length=0)
         hidden_length = hyperparams["hidden_length"]
         layer_number = hyperparams["layer_number"]
@@ -382,7 +440,9 @@ class VideoNet(MyModule):
         )
 
     # input为batch_size个list，每个list包含对应的视频帧数据，数据为cpu上的tensor
-    def forward(self, video_input, extra_feats, tag=None, image_batch_size=100, device="cpu"):
+    def forward(
+        self, video_input, extra_feats, tag=None, image_batch_size=100, device="cpu"
+    ):
         frame_data = []
         sep_points = [0]
         for video_frames in video_input:
@@ -406,8 +466,10 @@ class VideoNet(MyModule):
         video_data_input = []
         lengths = []
         for i in range(len(video_input)):
-            video_data_input.append(img_embeds_flatten[sep_points[i]:sep_points[i+1]])
-            lengths.append(sep_points[i+1] - sep_points[i])
+            video_data_input.append(
+                img_embeds_flatten[sep_points[i] : sep_points[i + 1]]
+            )
+            lengths.append(sep_points[i + 1] - sep_points[i])
         # print(len(video_data_input))
         # for i in video_data_input:
         #     print(i.shape)
@@ -417,7 +479,9 @@ class VideoNet(MyModule):
         )
         lstm_out, (hn, cn) = self.lstm(input_packed)
         hn_batch_first = torch.transpose(hn, 0, 1).contiguous()
-        fc_input = torch.cat((hn_batch_first.view(hn_batch_first.shape[0], -1), extra_feats), dim=1)
+        fc_input = torch.cat(
+            (hn_batch_first.view(hn_batch_first.shape[0], -1), extra_feats), dim=1
+        )
         # fc_input = hn_batch_first.view(hn_batch_first.shape[0], -1)
         output = self.fc(fc_input)
         out_probs = F.softmax(output, dim=1).detach()
