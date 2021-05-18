@@ -1,12 +1,13 @@
 #!/usr/bin/env python
 # encoding: utf-8
-"""
+'''
 @author: zhangruifeng
 @contact: zrf1999@pku.edu.cn
-@file: basic_data_handler.py
-@time: 2021/5/4 13:24
+@file: DataHandler_test.py
+@time: 2021/5/17 15:31
 @github: local 16351726fa15c85f565b7d5fecdf320ea67a72ef
-"""
+'''
+
 from __future__ import print_function
 import numpy as np
 import pandas as pd
@@ -35,6 +36,7 @@ from scenedetect import SceneManager
 # For content-aware scene detection:
 from scenedetect.detectors import ContentDetector
 
+
 class DataHandler:
     def __init__(self, data_path, log_level=logging.INFO):
         self.data_path = data_path
@@ -51,7 +53,7 @@ class DataHandler:
             )
         )
 
-    def gen_tag(self, cols: list, threshold):
+    def gen_tag(self, cols: list, threshold, bin_num=config.bin_number):
         # 采用固定阈值的方法，生成标签
         if len(cols) == 1:
             col_name = cols[0]
@@ -72,7 +74,7 @@ class DataHandler:
 
         # 采取在广告主下做归一化以及直接使用比值，threshold定义有所不同
         else:
-            col_son, col_base = self.data[cols]
+            col_son, col_base = self.data[cols[0]], self.data[cols[1]]
             datalen = len(self.data)
             for i in range(datalen):
                 if col_base[i] < threshold:
@@ -81,7 +83,7 @@ class DataHandler:
                     col_base[i] = 1
             tag_data = np.array(col_son) / np.array(col_base)
             self.data["tag"] = tag_data
-            binned_tag, cut_points = bin_tags(tag_data, config.bin_number)
+            binned_tag, cut_points = bin_tags(tag_data, bin_num)
             self.data["binned_tag"] = binned_tag
             self.logger.info(cut_points)
             aggs = self.data.groupby(["advid"], as_index=True)["tag"].agg(
@@ -108,8 +110,10 @@ class DataHandler:
             self.logger.info(
                 "%d data dropped due to advertiser cold start" % len(removed_rows)
             )
+            binned_tag, cut_points = bin_tags(mean_tag, bin_num)
+            self.logger.info(cut_points)
             self.data.drop(index=self.data.index[removed_rows], inplace=True)
-            self.data["mean_tag"] = mean_tag
+            self.data["mean_tag"] = binned_tag
             # self.data['bctr_mean'] = bctr_mean
             # self.data['bctr_std'] = bctr_std
 
@@ -345,15 +349,15 @@ class DataHandler:
         self.data["group_id"] = group_ids
         self.store_data()
 
-    def get_tag_in_advid(self):
+    def get_tag_in_advid(self, tag_col="tag"):
         advids = self.data["advid"]
         all_match = 0
         for advid in set(list(advids)):
             matches = []
             for i in range(config.bin_number):
-                match = sum(self.data["tag"][advids==advid]==i)
+                match = sum(self.data[tag_col][advids==advid]==i)
                 matches.append(match)
-                print("Advid %d, tag %d, sum %d" % (advid, i, match))
+                # print("Advid %d, tag %d, sum %d" % (advid, i, match))
             all_match += np.max(matches)
         print(f"Precision {all_match / self.data_len}")
 
@@ -435,15 +439,22 @@ def worker(data, data_len, indexes, group_ids, group_number, process_id, lock):
                 group_ids[j] = group_number.value
             lock.release()
 
+# 检查tag和advid的关系
+def check_tag_relevance():
+    data_handler = DataHandler(config.raw_data_file, log_level=logging.INFO)
+    data_handler.gen_tag(["pclk", "imp"], 100, bin_num=2)
+    data_handler.get_tag_in_advid("binned_tag")
+    data_handler.get_tag_in_advid("mean_tag")
+
 if __name__ == "__main__":
     # data_handler = DataHandler(config.raw_data_file)
-    data_handler = DataHandler(config.raw_data_file, log_level=logging.FATAL)
+    check_tag_relevance()
 
     # data_handler.seperate_text()
 
-    data_handler.find_scenes(config.video_folder)
+    # data_handler.find_scenes(config.video_folder)
 
-    data_handler.store_data()
+    # data_handler.store_data()
 
     # data_handler.get_tag_in_advid()
     # data_handler.get_upload_times()
@@ -461,7 +472,9 @@ if __name__ == "__main__":
 
     # data_handler.seperate_text()
     #
-    # data_handler.gen_tag(["cost"], 100)
+    # data_handler = DataHandler(config.raw_data_file, log_level=logging.INFO)
+    # data_handler.gen_tag(["bclk", "clk"], 100)
+    # data_handler.get_tag_in_advid("mean_tag")
     #
     # data_handler.store_data()
 

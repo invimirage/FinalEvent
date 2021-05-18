@@ -160,18 +160,22 @@ class VideoScorer:
         ec_model.to(self.device)
         ec_model.eval()
         frames_data = {}
+        if not os.path.exists(config.img_embed_folder):
+            os.makedirs(config.img_embed_folder)
         for i, video_file in enumerate(video_files):
             if i % 100 == 0:
                 self.logger.info('Process: %d/%d' % (i, len(video_files)))
+            if i > 0 and i % 100 == 0:
+                np.savez(os.path.join(config.img_embed_folder, f"{i}.npz"), frames_data)
+                frames_data = {}
             id = video_file.split('.')[0]
             video_file_path = os.path.join(video_input_folder, video_file)
             frames = self.load_video_data(video_file_path,  frame_rate=config.video_frame_rate, target_rate=self.model.hyperparams["frame_rate"])
             frames_tensor = torch.from_numpy(frames).to(device=self.device, dtype=torch.float32)
             with torch.no_grad():
-                frame_embeds = ec_model.extract_features(frames_tensor)
-                self.logger.debug(frame_embeds.shape)
+                frame_embeds = ec_model._avg_pooling(ec_model.extract_features(frames_tensor)).flatten(start_dim=1)
+                # print(frame_embeds.shape)
             frames_data[id] = frame_embeds.cpu().numpy()
-        np.savez(config.img_embed_file, frames_data)
         return frames_data
 
     def run_video_net_with_embed(self, mode, kwargs):
@@ -448,7 +452,8 @@ def main(model, logger, kwargs):
     run_params = model.hyperparams["common"]
     if model.requires_embed:
         try:
-            embed = np.load(config.img_embed_file, allow_pickle=True)
+            embed = np.load(config.img_embed_folder, allow_pickle=True)
+            print(len(embed))
         except:
             embed = video_scorer.image_embedding(config.video_folder)
         frame_data = []

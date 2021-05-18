@@ -340,7 +340,11 @@ def save_the_best(model, f1, id, tag, pred, file_name):
 
 
 def load_model(file_name, model=None, info=False):
-    model_path = os.path.join(config.model_save_path, file_name + ".pth")
+    if not file_name.endswith("pth"):
+        model_path = os.path.join(config.model_save_path, file_name + ".pth")
+    else:
+        model_path = file_name
+    print(model_path)
     try:
         checkpoint = torch.load(model_path)
     except:
@@ -373,6 +377,8 @@ def parse_extra_features(data: pd.DataFrame):
     text_len = np.array([len(text) for text in list(data["full_texts"])])
     height = np.array(data["height"])
     width = np.array(data["width"])
+    times_already_uploaded = np.array(data["times_already_uploaded"])
+    days_to_first_upload = np.array(data["days_to_first_upload"])
     speech_speed = np.array(data["speech_speed"])
     # print(speech_speed.mean(), speech_speed.max(), speech_speed.min())
     is_vertical = np.array(height > width, dtype=int)
@@ -383,6 +389,8 @@ def parse_extra_features(data: pd.DataFrame):
     duration = normalization(duration)
     text_len = normalization(text_len)
     speech_speed = normalization(speech_speed)
+    times_already_uploaded = normalization(times_already_uploaded)
+    days_to_first_upload = normalization(days_to_first_upload)
     advid_onehot = []
     one_hot_len = len(config.advids)
     advid_dict = {k: v for v, k in enumerate(config.advids)}
@@ -402,6 +410,8 @@ def parse_extra_features(data: pd.DataFrame):
             text_len,
             speech_speed,
             advid_onehot,
+            times_already_uploaded,
+            days_to_first_upload
         )
     )
     return extra_features

@@ -47,24 +47,24 @@ video_params = {
     "number_epochs": 100,
     "random": 1,
 }
-logger = init_logger(
-    log_level=logging.INFO,
-    name="Separated_LSTM_with_more_extra",
-    write_to_file=False,
-    clean_up=True,
-)
-adjust_hyperparams(
-    logger,
-    params,
-    sample_number=1,
-    model_name="SeparatedLSTM",
-    run_model=text_scorer,
-    test_params=test_params,
-    embed_type="local",
-    force_embed=True,
-    use_cls=False,
-    test_mode=test_mode
-)
+# logger = init_logger(
+#     log_level=logging.INFO,
+#     name="Separated_LSTM_with_upload_time",
+#     write_to_file=False,
+#     clean_up=True,
+# )
+# adjust_hyperparams(
+#     logger,
+#     params,
+#     sample_number=1,
+#     model_name="SeparatedLSTM",
+#     run_model=text_scorer,
+#     test_params=test_params,
+#     embed_type="local",
+#     force_embed=True,
+#     use_cls=False,
+#     test_mode=test_mode
+# )
 # adjust_hyperparams(
 #     logger,
 #     params,
@@ -135,7 +135,7 @@ adjust_hyperparams(
 
 # logger = init_logger(
 #     log_level=logging.INFO,
-#     name="Separated_LSTM_with_extra_and_neighbors",
+#     name="Separated_LSTM_with_extra_and_neighbors_no_center",
 #     write_to_file=True,
 #     clean_up=True,
 # )
@@ -150,7 +150,7 @@ adjust_hyperparams(
 #     force_embed=True,
 #     use_cls=False,
 #     neighbor=1,
-#     only_center=True,
+#     only_center=False,
 #     max_len=100,
 #     test_mode=test_mode
 # )
@@ -170,10 +170,40 @@ adjust_hyperparams(
 #     test_mode=test_mode
 # )
 
-## Force 覆盖之前的extraction
+# Force 覆盖之前的extraction
+# logger = init_logger(
+#         logging.INFO, name="VideoScorerWithEmbedding", write_to_file=False, clean_up=True
+#     )
+# adjust_hyperparams(
+#     logger, params, 10, "VideoNetEmbed", video_scorer, extract_frames=True, force=False
+# )
+
+cnn_params = {
+                "hidden_length": [32, 16, 8],
+                "linear_hidden_length": [32, 64, 128],
+                "grad_layer_name": ["none"],
+                "drop_out_rate": 0.5,
+                "channels": [64, 128],
+                "batch_size": [20],
+                "learning_rate": 1e-4,
+                "training_size": 0.8,
+                "number_epochs": 100,
+            }
 logger = init_logger(
-        logging.DEBUG, name="VideoScorerWithEmbedding", write_to_file=False, clean_up=False
-    )
+    log_level=logging.INFO,
+    name="BertCNN_more_layers",
+    write_to_file=True,
+    clean_up=True,
+)
 adjust_hyperparams(
-    logger, params, 10, "VideoNetEmbed", video_scorer, extract_frames=True, force=False
+    logger,
+    params,
+    sample_number=20,
+    model_name="BertWithCNN",
+    run_model=text_scorer,
+    test_params=cnn_params,
+    embed_type="local",
+    force_embed=False,
+    use_cls=False,
+    test_mode=test_mode
 )

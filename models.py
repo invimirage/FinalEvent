@@ -92,6 +92,7 @@ class BertWithCNN(MyModule):
         linear_hidden_length = hyperparams["linear_hidden_length"]
         grad_layer_name = hyperparams["grad_layer_name"]
         channels = hyperparams["channels"]
+        first_out_channels = channels // 2
         drop_out_rate = hyperparams["drop_out_rate"]
         # embedding_dim = self.textExtractor.config.hidden_size
         self.bert_model = BertModel.from_pretrained(bert_path)
@@ -104,8 +105,14 @@ class BertWithCNN(MyModule):
                 requires_grad = True
             para.requires_grad = requires_grad
         self.pooler = nn.Sequential(
-            nn.Conv2d(in_channels=1, out_channels=channels, kernel_size=(10, 10)),
+            nn.Conv2d(in_channels=1, out_channels=first_out_channels, kernel_size=(7, 7)),
             nn.ReLU(),
+            nn.MaxPool2d((20, 1), 10, padding=(5, 0), ceil_mode=True),
+            nn.Conv2d(in_channels=first_out_channels, out_channels=channels, kernel_size=(3, 3)),
+            nn.ReLU(),
+            # nn.AvgPool2d((2, 2), 2, padding=1, ceil_mode=True),
+            # nn.Conv2d(in_channels=channels, out_channels=channels, kernel_size=(3, 3)),
+            # nn.ReLU(),
             # nn.Dropout(drop_out_rate),
             nn.AdaptiveAvgPool2d(hidden_length),
         )

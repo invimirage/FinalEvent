@@ -16,6 +16,8 @@ from matplotlib import pyplot as plt
 import json
 import re
 from basic_data_handler import DataHandler
+from sklearn.metrics import roc_curve
+from sklearn.metrics import auc
 
 
 class DataShower(DataHandler):
@@ -28,7 +30,21 @@ class DataShower(DataHandler):
 class ModelResults:
     def __init__(self, log_file_name, log_level):
         self.logger = init_logger(log_level, name="model_result_parser")
-        self.log_file = os.path.join(config.log_dir, log_file_name) + ".txt"
+        self.log_file = os.path.join(config.log_dir, "log_" + log_file_name) + ".txt"
+        self.model_file = os.path.join(config.model_save_path, log_file_name) + ".pth"
+
+    def get_model_result(self):
+        model_file = self.model_file
+        f1, id, pred, tag = load_model(model_file, model=None, info=True)
+        return f1, id, pred, tag
+
+    def cal_auc(self, pred, tag):
+        # 按照第-1维计算AUC
+        pred = np.array(pred)
+        tag = np.array(np.array(tag) == np.max(tag), dtype=int)
+
+        fpr, tpr, thresholds = roc_curve(tag, pred, pos_label=1)
+        print("-----sklearn:", auc(fpr, tpr))
 
     # 加载文件，并选出f1最好的一次测试
     def get_best_test(self):
@@ -107,5 +123,10 @@ class ModelResults:
 
 
 if __name__ == "__main__":
-    log_parser = ModelResults("log_SeparatedLSTM_without_advid", log_level=logging.INFO)
-    print(log_parser.get_best_test())
+    for model in os.listdir(config.model_save_path):
+        if model.endswith('.pth'):
+            log_parser = ModelResults(model.split('.')[0], log_level=logging.INFO)
+            _, _, pred, tag = log_parser.get_model_result()
+            log_parser.cal_auc(pred, tag)
+    # print(log_parser.get_best_test())
+

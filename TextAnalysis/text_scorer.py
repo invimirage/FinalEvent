@@ -495,7 +495,7 @@ class TextScorer:
         random_batching = kwargs["params"]["random"] == 1
 
         # 文本数据是分段的，需要构建模型输入数据，即input和seps
-        def build_bert_input(text_data, max_text_length=100):
+        def build_bert_input(text_data, max_text_length=150):
             tokens, segments, input_masks = [], [], []
             tokenizer = BertTokenizer(
                 vocab_file=os.path.join(bert_path, "vocab.txt")
