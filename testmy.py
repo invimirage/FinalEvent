@@ -14,6 +14,23 @@ import os
 import time
 from utils import *
 import cv2
+from models import *
+# a = {1:2}
+
+data = pd.read_csv(config.raw_data_file)
+print(data["mean_val"], data["mean_tag"])
+# a.update({2:1})
+# print(a)
+# m = torch.tensor([1, 2, 3])
+# a = torch.tensor([1, 2, 0])
+# b = (a != 0)
+# print(m*b)
+# with open("./Hyperparameters.json") as f:
+#     hp = json.load(f)
+# ps = hp["SeparatedLSTM"]
+# lstm = BiLSTMWithAttention(input_length=20, extra_length=1, hyperparams=ps)
+# input = torch.zeros([2, 10, 20])
+# lstm(input, torch.zeros((2, 1)))
 # from datetime import datetime
 # a = "2020-01-02"
 # b = "2021-01-02"
@@ -21,11 +38,11 @@ import cv2
 # b = datetime.strptime(b, "%Y-%m-%d")
 # delta = a - b
 # print(delta.days)
-a = torch.tensor([1, 2, 3]).to("cuda:0")
-print(a[2:5])
-a = pd.DataFrame([[2, 3, 4], [2, 1, 1]], columns=['a', 'v', 'b'])
-b = pd.DataFrame([[2, 3,5], [2, 5, 1]], columns=['a', 'v', 'b'])
-print(pd.concat((a, b),axis=0, ignore_index=True))
+# a = torch.tensor([1, 2, 3]).to("cuda:0")
+# print(a[2:5])
+# a = pd.DataFrame([[2, 3, 4], [2, 1, 1]], columns=['a', 'v', 'b'])
+# b = pd.DataFrame([[2, 3,5], [2, 5, 1]], columns=['a', 'v', 'b'])
+# print(pd.concat((a, b),axis=0, ignore_index=True))
 # videos = os.listdir(config.video_folder)
 # count = 0
 # for v in videos:

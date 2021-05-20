@@ -64,7 +64,10 @@ class VideoScorer:
             os.makedirs(target_file_folder)
         np.random.shuffle(video_files)
         video_framerate = config.video_frame_rate
-        target_framerate = self.model.hyperparams["frame_rate"]
+        try:
+            target_framerate = self.model.hyperparams["frame_rate"]
+        except KeyError:
+            target_framerate = self.model.hyperparams["video"]["frame_rate"]
         self.logger.info(
             f"Original frame rate {video_framerate}, target frame rate {target_framerate}"
         )
@@ -147,6 +150,8 @@ class VideoScorer:
             self.run_video_net(mode, kwargs)
         if self.model.name == "VideoNetEmbed":
             self.run_video_net_with_embed(mode, kwargs)
+        if self.model.name == "JointNet":
+            self.run_video_text_net(mode, kwargs)
 
     # video_input_folder包含所有video的numpy数组，使用id来确定顺序
     def image_embedding(self, video_input_folder):
@@ -287,6 +292,139 @@ class VideoScorer:
                 for batch_inds in train_batches:
                     pred, loss = feed_model(
                         frames, extra_feats, tags, batch_inds
+                    )  # text_hashCodes是一个32-dim文本特征
+                    optimizer.zero_grad()
+                    self.logger.debug(loss)
+                    loss.backward()
+                    # for name, param in self.model.named_parameters():
+                    #     self.logger.debug(param.grad)
+                    optimizer.step()
+
+                np.random.shuffle(train_inds)
+
+                for name, param in self.model.named_parameters():
+                    if name == "fcs.2.bias":
+                        self.logger.debug(name, param)
+        else:
+            pass
+
+    def run_video_text_net(self, mode, kwargs):
+        batch_size = kwargs["params"]["batch_size"]
+        lr = kwargs["params"]["learning_rate"]
+        training_size = kwargs["params"]["training_size"]
+        num_epoch = kwargs["params"]["number_epochs"]
+        frames = kwargs["frames"]
+        text_embed_data = kwargs["text_data"]
+        random_batching = kwargs["params"]["random"] == 1
+
+        # 文本数据是分段的，需要构建模型输入数据，即input和seps
+        def feed_model(frame_data, text_data, extra_data, tag_data, indexes, requires_grad=True):
+            text_input = []
+            frame_input = []
+            lengths = []
+            extra = []
+            for data_section_id in indexes:
+                # frame_data_section = frame_data[data_section_id]
+                frame_data_section = self.load_video_data(
+                    frame_data[data_section_id],
+                    frame_rate=config.video_frame_rate,
+                    target_rate=self.model.hyperparams["video"]["frame_rate"],
+                )
+                text_data_section = text_data[data_section_id]
+                extra_feat = extra_data[data_section_id]
+                extra.append(extra_feat)
+                text_input.append(torch.tensor(text_data_section, dtype=torch.float32))
+                frame_input.append(torch.tensor(frame_data_section, dtype=torch.float32))
+                lengths.append(len(text_data_section))
+            input_padded = rnn.pad_sequence(text_input, batch_first=True)
+            self.logger.debug("padded {}".format(input_padded))
+            _input_packed = rnn.pack_padded_sequence(
+                input_padded, lengths=lengths, batch_first=True, enforce_sorted=False
+            ).to(self.device)
+            _tag_data = tag_data[indexes].to(self.device)
+            _extra_data = torch.tensor(extra, dtype=torch.float32).to(self.device)
+            if not requires_grad:
+                with torch.no_grad():
+                    pred, loss = self.model(_input_packed, frame_input, _extra_data, _tag_data)
+            else:
+                pred, loss = self.model(_input_packed, frame_input, _extra_data, _tag_data)
+            return pred, loss
+
+        self.logger.info("Running model, %s" % mode)
+        extra_feats = kwargs["extra_features"]
+        tags = self.tag.to(torch.int64)
+
+        assert mode in ["train", "predict"]
+        if mode == "train":
+            optimizer = torch.optim.Adam(self.model.parameters(), lr=lr)
+            train_inds, test_inds = sep_train_test(self.data_len, tags, training_size)
+            train_inds_sample = train_inds[:: int(training_size // (1 - training_size))]
+            self.logger.info("Training data length: %d" % len(train_inds))
+
+            # 生成的训练、测试数据供测试使用
+            best_micro_f1 = 0
+            best_epoch = 0
+            for epoch in range(num_epoch):
+                if epoch % kwargs["print_interval"] == 0:
+                    train_batches = build_batch(
+                        train_inds_sample, batch_size, False, tags[train_inds_sample]
+                    )
+                    test_batches = build_batch(test_inds, batch_size, False, tags)
+                    training_preds = []
+                    training_losses = []
+                    testing_preds = []
+                    testing_losses = []
+                    for batch_inds in train_batches:
+                        pred, loss = feed_model(
+                            frames, text_embed_data, extra_feats, tags, batch_inds, requires_grad=False
+                        )
+                        training_preds.append(pred)
+                        training_losses.append(loss.unsqueeze(0))
+                    pred_train = torch.cat(training_preds, dim=0)
+                    train_loss = torch.mean(torch.cat(training_losses, dim=0))
+                    for batch_inds in test_batches:
+                        pred, loss = feed_model(
+                            frames, text_embed_data, extra_feats, tags, batch_inds, requires_grad=False
+                        )
+                        testing_preds.append(pred)
+                        testing_losses.append(loss.unsqueeze(0))
+                    pred_test = torch.cat(testing_preds, dim=0)
+                    test_loss = torch.mean(torch.cat(testing_losses, dim=0))
+
+                    f1_mean = output_logs(
+                        self,
+                        epoch,
+                        kwargs,
+                        pred_train,
+                        train_loss,
+                        train_inds_sample,
+                        pred_test,
+                        test_loss,
+                        test_inds,
+                    )
+                    if f1_mean > best_micro_f1:
+                        best_micro_f1 = f1_mean
+                        best_epoch = epoch
+                        if f1_mean > self.best_f1:
+                            self.best_f1 = f1_mean
+                            save_the_best(
+                                self.model,
+                                f1_mean,
+                                kwargs["ids"],
+                                tags[test_inds],
+                                pred_test,
+                                self.logger.name,
+                            )
+                    self.logger.info(
+                        "Best Micro-F1: %.6lf, epoch %d" % (best_micro_f1, best_epoch)
+                    )
+                    if epoch - best_epoch > 10:
+                        break
+
+                train_batches = build_batch(train_inds, batch_size, random_batching, tags)
+                for batch_inds in train_batches:
+                    pred, loss = feed_model(
+                        frames, text_embed_data, extra_feats, tags, batch_inds
                     )  # text_hashCodes是一个32-dim文本特征
                     optimizer.zero_grad()
                     self.logger.debug(loss)
@@ -446,13 +584,24 @@ class VideoScorer:
 
 def main(model, logger, kwargs):
     data = pd.read_csv(config.raw_data_file)
-    best_f1 = load_model(file_name=logger.name)
+    method_name = logger.name
+    best_f1 = load_model(file_name=method_name)
     video_scorer = VideoScorer(model=model, logger=logger, f1=best_f1)
-    tag_col = "tag"
+    tag_col = kwargs.get("tag_col", "tag")
+    print(tag_col)
     run_params = model.hyperparams["common"]
+    print(run_params)
     if model.requires_embed:
         try:
-            embed = np.load(config.img_embed_folder, allow_pickle=True)
+            embed = {}
+            for embed_file in os.listdir(config.img_embed_folder):
+                embed_file_path = os.path.join(config.img_embed_folder, embed_file)
+                _embed = np.load(embed_file_path, allow_pickle=True)['arr_0'][()]
+                for key in _embed:
+                    # 减半
+                    _embed[key] = _embed[key][::4, :]
+                embed.update(_embed)
+                del _embed
             print(len(embed))
         except:
             embed = video_scorer.image_embedding(config.video_folder)
@@ -470,7 +619,7 @@ def main(model, logger, kwargs):
                 os.makedirs(config.frame_data_folder)
             logger.info("Loading video frames")
             video_scorer.extract_frames(
-                config.video_folder, config.frame_data_folder, kwargs["force"]
+                config.video_folder, config.frame_data_folder, kwargs.get("force", False)
             )
         #     video_files = os.listdir(config.frame_data_folder)
         # else:
@@ -496,19 +645,46 @@ def main(model, logger, kwargs):
     id = np.array(data["id"])
     video_sources = config.video_url_prefix + np.array(data["file"])
     extra_feats = parse_extra_features(data)
-    video_scorer.run_model(
-        mode="train",
-        extra_features=extra_feats,
-        ids=id,
-        # 文件名 .mp4 or .npy
-        frames=frame_data,
-        video_sources=video_sources,
-        params=run_params,
-        print_interval=1,
-        text=text_data,
-        # 用于image embedding
-        img_batch_size=config.img_batch_size,
-    )
+    # 需要文本信息
+    if model.name == "JointNet":
+        requires_embed = model.text_net.requires_embed
+        if requires_embed:
+            embed_file_path = kwargs.get("text_embed_file", config.embed_data_file + f"_{method_name.split('&')[0]}.npy")
+            print(embed_file_path)
+            try:
+                embed_data = np.load(embed_file_path, allow_pickle=True).tolist()
+                # embed_data = [embed_data[i] for i in range(len(embed_data)) if i not in removed_indexes]
+            except:
+                print("Text embedding not found! Do embed first!")
+                exit(0)
+            video_scorer.run_model(
+                mode="train",
+                extra_features=extra_feats,
+                ids=id,
+                # 文件名 .mp4 or .npy
+                frames=frame_data,
+                video_sources=video_sources,
+                params=run_params,
+                print_interval=1,
+                text=text_data,
+                text_data=embed_data,
+                # 用于image embedding
+                img_batch_size=config.img_batch_size,
+            )
+    else:
+        video_scorer.run_model(
+            mode="train",
+            extra_features=extra_feats,
+            ids=id,
+            # 文件名 .mp4 or .npy
+            frames=frame_data,
+            video_sources=video_sources,
+            params=run_params,
+            print_interval=1,
+            text=text_data,
+            # 用于image embedding
+            img_batch_size=config.img_batch_size,
+        )
 
 
 if __name__ == "__main__":

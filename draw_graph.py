@@ -23,10 +23,44 @@ from sklearn.metrics import auc
 class DataShower(DataHandler):
     def __init__(self, file_path, log_level):
         super().__init__(file_path, log_level)
-        self.data = pd.read_csv(file_path)
         self.graph_prefix = "Data_"
 
+    # 计算advid分类得到的结果，与模型输出对比
+    def compare_model_and_advid(self, id, pred):
+        tag_data = self.data["tag"]
+        aggs = self.data.groupby(["advid"], as_index=True)["tag"].agg(
+            ["sum", "count"]
+        )
+        aggs = pd.DataFrame(aggs)
+        aggs_dict = aggs.to_dict(orient="index")
+        mean_vals = []
+        for i, advid in enumerate(self.data["advid"]):
+            grouped_data = aggs_dict[advid]
+            mean_vals.append(grouped_data["sum"] / grouped_data["count"])
+        for id in self.data["id"]:
+            pass
+        self.data["mean_val"] = mean_vals
 
+    def cal_auc(self, pred, tag):
+        # 按照第-1维计算AUC
+        pred = np.array(pred)
+        tag = np.array(np.array(tag) == np.max(tag), dtype=int)
+
+        fpr, tpr, thresholds = roc_curve(tag, pred, pos_label=1)
+        plt.figure(figsize=(6, 6))
+        plt.title('Validation ROC')
+        plt.plot(fpr, tpr, 'b', label='Val AUC = %0.3f' % auc(fpr, tpr))
+        plt.legend(loc='lower right')
+        plt.plot([0, 1], [0, 1], 'r--')
+        plt.xlim([0, 1])
+        plt.ylim([0, 1])
+        plt.ylabel('True Positive Rate')
+        plt.xlabel('False Positive Rate')
+        plt.show()
+
+
+
+# parses log file and model file
 class ModelResults:
     def __init__(self, log_file_name, log_level):
         self.logger = init_logger(log_level, name="model_result_parser")
@@ -37,14 +71,6 @@ class ModelResults:
         model_file = self.model_file
         f1, id, pred, tag = load_model(model_file, model=None, info=True)
         return f1, id, pred, tag
-
-    def cal_auc(self, pred, tag):
-        # 按照第-1维计算AUC
-        pred = np.array(pred)
-        tag = np.array(np.array(tag) == np.max(tag), dtype=int)
-
-        fpr, tpr, thresholds = roc_curve(tag, pred, pos_label=1)
-        print("-----sklearn:", auc(fpr, tpr))
 
     # 加载文件，并选出f1最好的一次测试
     def get_best_test(self):

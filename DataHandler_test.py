@@ -35,6 +35,8 @@ from scenedetect import SceneManager
 
 # For content-aware scene detection:
 from scenedetect.detectors import ContentDetector
+from sklearn.metrics import roc_curve
+from sklearn.metrics import auc
 
 
 class DataHandler:
@@ -71,6 +73,18 @@ class DataHandler:
                 )
             )
             self.data["tag"] = tag_data
+            aggs = self.data.groupby(["advid"], as_index=True)["tag"].agg(
+                ["sum", "count"]
+            )
+            aggs = pd.DataFrame(aggs)
+            # aggs.to_csv(config.grouped_data_file)
+            aggs_dict = aggs.to_dict(orient="index")
+            mean_vals = []
+            for i, advid in enumerate(self.data["advid"]):
+                grouped_data = aggs_dict[advid]
+                mean_vals.append(grouped_data["sum"]/grouped_data["count"])
+
+            self.data["mean_val"] = mean_vals
 
         # 采取在广告主下做归一化以及直接使用比值，threshold定义有所不同
         else:
@@ -90,12 +104,13 @@ class DataHandler:
                 ["mean", "std", "count"]
             )
             aggs = pd.DataFrame(aggs)
-            aggs.to_csv(config.grouped_data_file)
+            # aggs.to_csv(config.grouped_data_file)
             aggs_dict = aggs.to_dict(orient="index")
             # advid_mean = []
             # advid_std = []
             mean_tag = []
             removed_rows = []
+            mean_vals = []
             for i, advid in enumerate(self.data["advid"]):
                 grouped_data = aggs_dict[advid]
                 if grouped_data["count"] < config.advid_threshold:
@@ -103,6 +118,7 @@ class DataHandler:
                 else:
                     bctr = self.data["tag"][i]
                     bctr_mean = grouped_data["mean"]
+                    mean_vals.append(bctr_mean)
                     bctr_std = grouped_data["std"]
                     # advid_mean.append(bctr_mean)
                     # advid_std.append(bctr_std)
@@ -114,6 +130,7 @@ class DataHandler:
             self.logger.info(cut_points)
             self.data.drop(index=self.data.index[removed_rows], inplace=True)
             self.data["mean_tag"] = binned_tag
+            self.data["mean_val"] = mean_vals
             # self.data['bctr_mean'] = bctr_mean
             # self.data['bctr_std'] = bctr_std
 
@@ -321,6 +338,24 @@ class DataHandler:
         # relation_groups = np.array(relation_groups, dtype=object)
         # np.save(os.path.join(self.data_folder, config.grouped_data_file), relation_groups)
 
+    def cal_auc(self, pred, tag):
+        # 按照第-1维计算AUC
+        tag = self.data[tag]
+        pred = np.array(self.data[pred])
+        tag = np.array(np.array(tag) == np.max(tag), dtype=int)
+
+        fpr, tpr, thresholds = roc_curve(tag, pred, pos_label=1)
+        plt.figure(figsize=(6, 6))
+        plt.title('Validation ROC')
+        plt.plot(fpr, tpr, 'b', label='Val AUC = %0.3f' % auc(fpr, tpr))
+        plt.legend(loc='lower right')
+        plt.plot([0, 1], [0, 1], 'r--')
+        plt.xlim([0, 1])
+        plt.ylim([0, 1])
+        plt.ylabel('True Positive Rate')
+        plt.xlabel('False Positive Rate')
+        plt.show()
+        # print("-----sklearn:", auc(fpr, tpr))
 
     def group_similar_texts(self, process_number):
         # self.data = self.data[0:100]
@@ -442,9 +477,10 @@ def worker(data, data_len, indexes, group_ids, group_number, process_id, lock):
 # 检查tag和advid的关系
 def check_tag_relevance():
     data_handler = DataHandler(config.raw_data_file, log_level=logging.INFO)
-    data_handler.gen_tag(["pclk", "imp"], 100, bin_num=2)
-    data_handler.get_tag_in_advid("binned_tag")
+    # data_handler.gen_tag(["cost"], 100, bin_num=2)
     data_handler.get_tag_in_advid("mean_tag")
+    # data_handler.get_tag_in_advid("mean_tag")
+    data_handler.cal_auc("mean_val", "mean_tag")
 
 if __name__ == "__main__":
     # data_handler = DataHandler(config.raw_data_file)

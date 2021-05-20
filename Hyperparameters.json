@@ -10,7 +10,20 @@
     "max_slice_length": 20,
     "min_slice_length": 5
   },
-  "SeparatedLSTM" : {
+  "SeparatedLSTM": {
+    "hidden_length": 256,
+    "layer_number": 2,
+    "linear_hidden_length": 64,
+    "drop_out_rate": 0.5,
+    "common": {
+      "batch_size": 400,
+      "learning_rate": 1e-4,
+      "training_size": 0.8,
+      "number_epochs": 20,
+      "random": 1
+    }
+  },
+  "BiLSTMWithAttention": {
     "hidden_length": 256,
     "layer_number": 2,
     "linear_hidden_length": 64,
@@ -87,5 +100,32 @@
       "number_epochs": 100,
       "random": 1
     }
+  },
+  "JointNet": {
+      "text_hidden_length": [128, 256, 512],
+      "text_layer_number": [1, 2, 3],
+      "text_linear_hidden_length": [64, 128],
+      "text_drop_out_rate": [0.5, 0.6],
+      "text_batch_size": [400, 600, 800],
+      "text_learning_rate": 1e-4,
+      "text_training_size": 0.8,
+      "text_number_epochs": 100,
+      "video_frame_rate": 1,
+      "video_input_length": 512,
+      "video_pic_linear_hidden_length": 1024,
+      "video_pic_grad_layer_name": "aaa_blocks.31",
+      "video_pic_drop_out_rate": [0.5, 0.3, 0.6],
+      "video_pic_channels": 3,
+      "video_layer_number": 3,
+      "video_hidden_length": 512,
+      "video_linear_hidden_length": 128,
+      "video_drop_out_rate": 0.5,
+      "common": {
+        "batch_size": 100,
+        "learning_rate": 1e-4,
+        "training_size": 0.8,
+        "number_epochs": 100,
+        "random": 1
+      }
   }
 }

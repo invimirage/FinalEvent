@@ -145,6 +145,67 @@ class BertWithCNN(MyModule):
             loss = 0
         return out_probs, loss
 
+class BiLSTMWithAttention(MyModule):
+    def __init__(self, input_length, extra_length, hyperparams):
+        super().__init__("BiLSTMWithAttention", True, hyperparams)
+        input_length = input_length
+        hidden_length = hyperparams["hidden_length"]
+        layer_number = hyperparams["layer_number"]
+        linear_hidden_length = hyperparams["hidden_length"]
+        drop_out_rate = hyperparams["drop_out_rate"]
+        self.drop_out_rate = drop_out_rate
+        self.lstm = nn.LSTM(
+            input_size=input_length,
+            hidden_size=hyperparams["hidden_length"],
+            num_layers=hyperparams["layer_number"],
+            batch_first=True,
+            bidirectional=True,
+            dropout=hyperparams["drop_out_rate"],
+        )
+        # 2代表双向
+        self.attention_weight = torch.ones((2*hidden_length, 1), dtype=torch.float32, requires_grad=True)
+        self.fc = nn.Sequential(
+            nn.Linear(
+                2*hidden_length + extra_length, linear_hidden_length
+            ),
+            nn.ReLU(),
+            nn.Dropout(drop_out_rate),
+            nn.Linear(linear_hidden_length, config.bin_number),
+        )
+
+    def get_attention_output(self, lstm_out, mask):
+        H = torch.tanh(lstm_out)
+        # print(lstm_out)
+        attention_weights = torch.matmul(H, self.attention_weight)
+        mask_for_weights = mask != 0
+        # print(attention_weights.shape)
+        weights_normalize = F.softmax(attention_weights * mask_for_weights, dim=-2)
+        # print(weights_normalize.shape, weights_normalize)
+        attention_output = torch.tanh(torch.sum(lstm_out * weights_normalize, dim=-2))
+        # print(attention_output.shape)
+        # output_dropout = torch.dropout(attention_output, p=self.drop_out_rate)
+        return attention_output
+
+
+    # seperates [0, 10, 30]递增序列，表示一个文本的分段在batch中的位置
+    def forward(self, text_data, extra_data, tag=None):
+        # print(text_data)
+        lengths_mask = rnn.pad_packed_sequence(text_data, batch_first=True)
+        lstm_out, _ = self.lstm(text_data)
+        attention_output = self.get_attention_output(lstm_out, lengths_mask)
+        fc_input = torch.cat(
+            (attention_output, extra_data), dim=1
+        )
+        # fc_input = hn_batch_first.view(hn_batch_first.shape[0], -1)
+        output = self.fc(fc_input)
+        out_probs = F.softmax(output, dim=1).detach()
+        # print(tag)
+        if tag is not None:
+            criterion = nn.CrossEntropyLoss()
+            loss = criterion(output, tag)
+        else:
+            loss = 0
+        return out_probs, loss
 
 class SeparatedLSTM(MyModule):
     def __init__(self, input_length, extra_length, hyperparams):
@@ -161,6 +222,7 @@ class SeparatedLSTM(MyModule):
             batch_first=True,
             dropout=hyperparams["drop_out_rate"],
         )
+        self.fc_input_length =  hidden_length * layer_number
         self.fc = nn.Sequential(
             nn.Linear(
                 hidden_length * layer_number + extra_length, linear_hidden_length
@@ -169,6 +231,12 @@ class SeparatedLSTM(MyModule):
             nn.Dropout(drop_out_rate),
             nn.Linear(linear_hidden_length, config.bin_number),
         )
+
+    def extract_features(self, text_data):
+        lstm_out, (hn, cn) = self.lstm(text_data)
+        hn_batch_first = torch.transpose(hn, 0, 1).contiguous()
+        hn_batch_first_flat = hn_batch_first.view(hn_batch_first.shape[0], -1)
+        return hn_batch_first_flat
 
     # seperates [0, 10, 30]递增序列，表示一个文本的分段在batch中的位置
     def forward(self, text_data, extra_data, tag=None, detail=False):
@@ -188,7 +256,6 @@ class SeparatedLSTM(MyModule):
         else:
             loss = 0
         return out_probs, loss
-
 
 class deal_embed(nn.Module):
     def __init__(self, bert_out_length, hidden_length):  # code_length为fc映射到的维度大小
@@ -228,7 +295,6 @@ class TextNet(nn.Module):
         else:
             loss = 0
         return out, loss
-
 
 # 模型输入为embeding之后的向量
 class ScorerNet(nn.Module):
@@ -364,6 +430,38 @@ class PictureNet(MyModule):
         return out_probs, loss
         # print(output.shape)
 
+class JointNet(MyModule):
+    def __init__(self, input_length, extra_length, hyperparams):
+        super().__init__(name="JointNet", requires_embed=False, hyperparams=hyperparams)
+        self.video_net = VideoNet(extra_length, hyperparams["video"])
+        self.text_net = SeparatedLSTM(input_length, extra_length, hyperparams["text"])
+        print(self.video_net.fc_input_length, self.text_net.fc_input_length)
+        fc_input_length = self.video_net.fc_input_length + self.text_net.fc_input_length + extra_length
+        linear_hidden_length = hyperparams["text"]["linear_hidden_length"]
+        drop_out_rate = hyperparams["text"]["drop_out_rate"]
+        self.fcs = nn.Sequential(
+            nn.Linear(
+                fc_input_length, linear_hidden_length
+            ),
+            nn.ReLU(),
+            nn.Dropout(drop_out_rate),
+            nn.Linear(linear_hidden_length, config.bin_number),
+        )
+
+    def forward(self, text_input, video_input, extra_feats, tag=None, image_batch_size=100, device="cuda" if torch.cuda.is_available() else "cpu"):
+        video_feats = self.video_net.extract_features(video_input, image_batch_size=image_batch_size, device=device)
+        text_feats = self.text_net.extract_features(text_input)
+        fc_input = torch.cat((video_feats, text_feats, extra_feats), dim=1)
+        output = self.fcs(fc_input)
+        out_probs = F.softmax(output, dim=1).detach()
+        # print(tag)
+        if tag is not None:
+            criterion = nn.CrossEntropyLoss()
+            loss = criterion(output, tag)
+        else:
+            loss = 0
+        return out_probs, loss
+
 class VideoNetEmbed(MyModule):
     def __init__(self, extra_length, hyperparams):
         super().__init__(name="VideoNetEmbed", requires_embed=True, hyperparams=hyperparams)
@@ -379,6 +477,7 @@ class VideoNetEmbed(MyModule):
             batch_first=True,
             dropout=hyperparams["drop_out_rate"],
         )
+        self.fc_input_length = hidden_length * layer_number
         self.fc = nn.Sequential(
             nn.Linear(
                 hidden_length * layer_number + extra_length, linear_hidden_length
@@ -387,6 +486,22 @@ class VideoNetEmbed(MyModule):
             nn.Dropout(drop_out_rate),
             nn.Linear(linear_hidden_length, config.bin_number),
         )
+
+    def extract_features(self, video_input):
+        lengths = []
+        for i in range(len(video_input)):
+            lengths.append(video_input[i].shape[0])
+        # print(len(video_data_input))
+        # for i in video_data_input:
+        #     print(i.shape)
+        input_padded = rnn.pad_sequence(video_input, batch_first=True)
+        input_packed = rnn.pack_padded_sequence(
+            input_padded, lengths=lengths, batch_first=True, enforce_sorted=False
+        )
+        lstm_out, (hn, cn) = self.lstm(input_packed)
+        hn_batch_first = torch.transpose(hn, 0, 1).contiguous()
+        hn_batch_first_flat = hn_batch_first.view(hn_batch_first.shape[0], -1)
+        return hn_batch_first_flat
 
     # input为batch_size个list，每个list包含对应的视频帧数据，数据为cpu上的tensor
     def forward(
@@ -437,6 +552,7 @@ class VideoNet(MyModule):
             batch_first=True,
             dropout=hyperparams["drop_out_rate"],
         )
+        self.fc_input_length = hidden_length * layer_number
         self.fc = nn.Sequential(
             nn.Linear(
                 hidden_length * layer_number + extra_length, linear_hidden_length
@@ -445,6 +561,46 @@ class VideoNet(MyModule):
             nn.Dropout(drop_out_rate),
             nn.Linear(linear_hidden_length, config.bin_number),
         )
+
+    def extract_features(self, video_input, image_batch_size=100, device="cpu"):
+        frame_data = []
+        sep_points = [0]
+        for video_frames in video_input:
+            # print(video_frames.shape)
+            frame_data.append(video_frames)
+            sep_points.append(sep_points[-1] + video_frames.shape[0])
+        frame_data_flatten = torch.cat(frame_data, dim=0)
+        n_batch = math.ceil(frame_data_flatten.shape[0] / image_batch_size)
+        # print(frame_data_flatten.shape)
+        img_embeds = []
+        for i in range(n_batch):
+            sta = i * image_batch_size
+            end = (i + 1) * image_batch_size
+            img_data = frame_data_flatten[sta:end]
+            img_embed = self.img_net.extract_features(img_data.to(device))
+            img_embeds.append(img_embed)
+            # print(img_embed.shape)
+        img_embeds_flatten = torch.cat(img_embeds)
+        # print(img_embeds_flatten.shape)
+        # print(sep_points)
+        video_data_input = []
+        lengths = []
+        for i in range(len(video_input)):
+            video_data_input.append(
+                img_embeds_flatten[sep_points[i]: sep_points[i + 1]]
+            )
+            lengths.append(sep_points[i + 1] - sep_points[i])
+        # print(len(video_data_input))
+        # for i in video_data_input:
+        #     print(i.shape)
+        input_padded = rnn.pad_sequence(video_data_input, batch_first=True)
+        input_packed = rnn.pack_padded_sequence(
+            input_padded, lengths=lengths, batch_first=True, enforce_sorted=False
+        )
+        lstm_out, (hn, cn) = self.lstm(input_packed)
+        hn_batch_first = torch.transpose(hn, 0, 1).contiguous()
+        hn_batch_first_flat = hn_batch_first.view(hn_batch_first.shape[0], -1)
+        return hn_batch_first_flat
 
     # input为batch_size个list，每个list包含对应的视频帧数据，数据为cpu上的tensor
     def forward(

@@ -79,19 +79,19 @@ video_params = {
 # )
 
 # with cls
-# test_params = {
-#     "hidden_length": [128, 256, 512],
-#     "layer_number": [1, 2, 3],
-#     "linear_hidden_length": [64, 128],
-#     "drop_out_rate": [0.5, 0.4],
-#     "batch_size": [400, 600, 800],
-#     "learning_rate": 1e-4,
-#     "training_size": 0.8,
-#     "number_epochs": 100,
-# }
+test_params = {
+    "hidden_length": [128, 256, 512],
+    "layer_number": [1, 2, 3],
+    "linear_hidden_length": [64, 128],
+    "drop_out_rate": [0.5, 0.4],
+    "batch_size": [400, 600, 800],
+    "learning_rate": 1e-4,
+    "training_size": 0.8,
+    "number_epochs": 100,
+}
 # logger = init_logger(
 #     log_level=logging.INFO,
-#     name="Separated_LSTM_with_more_extra_cls",
+#     name="Attention_LSTM_with_cls_extra",
 #     write_to_file=True,
 #     clean_up=True,
 # )
@@ -111,13 +111,15 @@ video_params = {
 #     logger,
 #     params,
 #     sample_number=20,
-#     model_name="SeparatedLSTM",
+#     model_name="BiLSTMWithAttention",
 #     run_model=text_scorer,
 #     test_params=test_params,
 #     embed_type="local",
 #     force_embed=False,
 #     use_cls=True,
-#     test_mode=test_mode
+#     test_mode=test_mode,
+#     tag_col="tag",
+#     embed_file=os.path.join(config.data_folder, "vector_embed_Separated_LSTM_with_upload_time.npy")
 # )
 
 # with more texts
@@ -178,20 +180,39 @@ video_params = {
 #     logger, params, 10, "VideoNetEmbed", video_scorer, extract_frames=True, force=False
 # )
 
-cnn_params = {
-                "hidden_length": [32, 16, 8],
-                "linear_hidden_length": [32, 64, 128],
-                "grad_layer_name": ["none"],
-                "drop_out_rate": 0.5,
-                "channels": [64, 128],
-                "batch_size": [20],
-                "learning_rate": 1e-4,
-                "training_size": 0.8,
-                "number_epochs": 100,
-            }
+# cnn_params = {
+#                 "hidden_length": [32, 16, 8],
+#                 "linear_hidden_length": [32, 64, 128],
+#                 "grad_layer_name": ["none"],
+#                 "drop_out_rate": 0.5,
+#                 "channels": [64, 128],
+#                 "batch_size": [20],
+#                 "learning_rate": 1e-4,
+#                 "training_size": 0.8,
+#                 "number_epochs": 100,
+#             }
+# logger = init_logger(
+#     log_level=logging.INFO,
+#     name="BertCNN_more_layers",
+#     write_to_file=True,
+#     clean_up=True,
+# )
+# adjust_hyperparams(
+#     logger,
+#     params,
+#     sample_number=20,
+#     model_name="BertWithCNN",
+#     run_model=text_scorer,
+#     test_params=cnn_params,
+#     embed_type="local",
+#     force_embed=False,
+#     use_cls=False,
+#     test_mode=test_mode
+# )
+
 logger = init_logger(
     log_level=logging.INFO,
-    name="BertCNN_more_layers",
+    name="Separated_LSTM_with_upload_time&Video_Embed_with_cost_no_mean",
     write_to_file=True,
     clean_up=True,
 )
@@ -199,11 +220,12 @@ adjust_hyperparams(
     logger,
     params,
     sample_number=20,
-    model_name="BertWithCNN",
-    run_model=text_scorer,
-    test_params=cnn_params,
+    model_name="JointNet",
+    run_model=video_scorer,
     embed_type="local",
-    force_embed=False,
     use_cls=False,
-    test_mode=test_mode
+    test_mode=test_mode,
+    tag_col="tag",
+    text_embed_file=os.path.join(config.data_folder, "vector_embed_Separated_LSTM_with_upload_time.npy"),
+    extract_frames=True
 )

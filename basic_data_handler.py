@@ -51,17 +51,19 @@ class DataHandler:
             )
         )
 
-    def gen_tag(self, cols: list, threshold):
+    def gen_tag(self, cols: list, thresholds, bin_num=config.bin_number):
         # 采用固定阈值的方法，生成标签
         if len(cols) == 1:
             col_name = cols[0]
 
             tag_data = []
             for i in self.data[col_name]:
-                if i < threshold:
-                    tag_data.append(0)
-                else:
-                    tag_data.append(1)
+                for j, thre in enumerate(thresholds):
+                    if i > thre:
+                        tag_data.append(j+1)
+                        break
+                    if j == len(thresholds) - 1:
+                        tag_data.append(0)
             tag_data = np.array(tag_data)
             self.logger.info(
                 "Tag positive count {}, negative count {}".format(
@@ -69,10 +71,33 @@ class DataHandler:
                 )
             )
             self.data["tag"] = tag_data
+            aggs = self.data.groupby(["advid"], as_index=True)["tag"].agg(
+                ["sum", "count"]
+            )
+            aggs = pd.DataFrame(aggs)
+            # aggs.to_csv(config.grouped_data_file)
+            aggs_dict = aggs.to_dict(orient="index")
+            mean_vals = []
+            for i, advid in enumerate(self.data["advid"]):
+                grouped_data = aggs_dict[advid]
+                mean_vals.append(grouped_data["sum"] / grouped_data["count"])
+
+            self.data["mean_val"] = mean_vals
+            aggs_tag = self.data.groupby(["advid"], as_index=True)[col_name].agg(
+                ["median"]
+            )
+            aggs_tag = pd.DataFrame(aggs_tag)
+            aggs_tag_dict = aggs_tag.to_dict(orient="index")
+            mean_tag = []
+            for tag_num, advid in zip(self.data[col_name], self.data["advid"]):
+                grouped_data = aggs_tag_dict[advid]
+                mean_tag.append(int(tag_num > grouped_data["median"]))
+            self.data["mean_tag"] = mean_tag
 
         # 采取在广告主下做归一化以及直接使用比值，threshold定义有所不同
         else:
-            col_son, col_base = self.data[cols]
+            threshold = thresholds[0]
+            col_son, col_base = self.data[cols[0]], self.data[cols[1]]
             datalen = len(self.data)
             for i in range(datalen):
                 if col_base[i] < threshold:
@@ -81,19 +106,20 @@ class DataHandler:
                     col_base[i] = 1
             tag_data = np.array(col_son) / np.array(col_base)
             self.data["tag"] = tag_data
-            binned_tag, cut_points = bin_tags(tag_data, config.bin_number)
+            binned_tag, cut_points = bin_tags(tag_data, bin_num)
             self.data["binned_tag"] = binned_tag
             self.logger.info(cut_points)
             aggs = self.data.groupby(["advid"], as_index=True)["tag"].agg(
                 ["mean", "std", "count"]
             )
             aggs = pd.DataFrame(aggs)
-            aggs.to_csv(config.grouped_data_file)
+            # aggs.to_csv(config.grouped_data_file)
             aggs_dict = aggs.to_dict(orient="index")
             # advid_mean = []
             # advid_std = []
             mean_tag = []
             removed_rows = []
+            mean_vals = []
             for i, advid in enumerate(self.data["advid"]):
                 grouped_data = aggs_dict[advid]
                 if grouped_data["count"] < config.advid_threshold:
@@ -101,6 +127,7 @@ class DataHandler:
                 else:
                     bctr = self.data["tag"][i]
                     bctr_mean = grouped_data["mean"]
+                    mean_vals.append(bctr_mean)
                     bctr_std = grouped_data["std"]
                     # advid_mean.append(bctr_mean)
                     # advid_std.append(bctr_std)
@@ -108,8 +135,11 @@ class DataHandler:
             self.logger.info(
                 "%d data dropped due to advertiser cold start" % len(removed_rows)
             )
+            binned_tag, cut_points = bin_tags(mean_tag, bin_num)
+            self.logger.info(cut_points)
             self.data.drop(index=self.data.index[removed_rows], inplace=True)
-            self.data["mean_tag"] = mean_tag
+            self.data["mean_tag"] = binned_tag
+            self.data["mean_val"] = mean_vals
             # self.data['bctr_mean'] = bctr_mean
             # self.data['bctr_std'] = bctr_std
 
@@ -441,9 +471,9 @@ if __name__ == "__main__":
 
     # data_handler.seperate_text()
 
-    data_handler.find_scenes(config.video_folder)
-
-    data_handler.store_data()
+    # data_handler.find_scenes(config.video_folder)
+    #
+    # data_handler.store_data()
 
     # data_handler.get_tag_in_advid()
     # data_handler.get_upload_times()
@@ -461,9 +491,9 @@ if __name__ == "__main__":
 
     # data_handler.seperate_text()
     #
-    # data_handler.gen_tag(["cost"], 100)
+    data_handler.gen_tag(["cost"], [100, 1000])
     #
-    # data_handler.store_data()
+    data_handler.store_data()
 
     # data_handler.build_sample(1000)
 

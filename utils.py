@@ -98,7 +98,7 @@ def sample_hyperparams(model_params, sample_list, test_params: dict) -> list:
 
 def adjust_hyperparams(logger, params, sample_number, model_name, run_model, **kwargs):
     global number
-    if model_name == "SeparatedLSTM":
+    if model_name == "SeparatedLSTM" or model_name == "BiLSTMWithAttention":
         # 调试slstm
         lr_high = 2
         lr_seps = 10
@@ -192,6 +192,35 @@ def adjust_hyperparams(logger, params, sample_number, model_name, run_model, **k
                 "random": 1,
             },
         )
+    elif model_name == "JointNet":
+        all_params = kwargs.get(
+            "test_params",
+            {
+                "text_hidden_length": [128, 256, 512],
+                "text_layer_number": [1, 2, 3],
+                "text_linear_hidden_length": [64, 128],
+                "text_drop_out_rate": [0.5, 0.6],
+                "text_batch_size": [400, 600, 800],
+                "text_learning_rate": 1e-4,
+                "text_training_size": 0.8,
+                "text_number_epochs": 100,
+                "video_frame_rate": 1,
+                "video_input_length": 512,
+                "video_pic_linear_hidden_length": 1024,
+                "video_pic_grad_layer_name": "aaa_blocks.31",
+                "video_pic_drop_out_rate": [0.5, 0.3, 0.6],
+                "video_pic_channels": 3,
+                "video_layer_number": 3,
+                "video_hidden_length": 512,
+                "video_linear_hidden_length": 128,
+                "video_drop_out_rate": 0.5,
+                "batch_size": 400,
+                "learning_rate": 1e-4,
+                "training_size": 0.8,
+                "number_epochs": 100,
+                "random": 1,
+            },
+        )
     params_to_test = {}
     for param in all_params:
         if isinstance(all_params[param], Iterable) and not isinstance(
@@ -218,8 +247,14 @@ def adjust_hyperparams(logger, params, sample_number, model_name, run_model, **k
     )
     for i, model_param in enumerate(sample_params):
         logger.info("Running sample {}, with parameters: {}".format(i, model_param))
-        if model_name == "SeparatedLSTM":
+        if model_name == "SeparatedLSTM" or model_name == "BiLSTMWithAttention":
             model = SeparatedLSTM(
+                input_length=1024,
+                extra_length=config.extra_feat_length,
+                hyperparams=params[model_name],
+            )
+        elif model_name == "BiLSTMWithAttention":
+            model = BiLSTMWithAttention(
                 input_length=1024,
                 extra_length=config.extra_feat_length,
                 hyperparams=params[model_name],
@@ -237,6 +272,24 @@ def adjust_hyperparams(logger, params, sample_number, model_name, run_model, **k
         elif model_name == "VideoNetEmbed":
             model = VideoNetEmbed(
                 extra_length=config.extra_feat_length, hyperparams=params[model_name]
+            )
+        elif model_name == "JointNet":
+            hparams = {
+                "video": {},
+                "text": {},
+                "common": params[model_name]["common"]
+            }
+            for param, val in params[model_name].items():
+                if param.startswith('video'):
+                    striplen = len('video_')
+                    hparams["video"][param[striplen:]] = val
+                elif param.startswith('text'):
+                    striplen = len('text_')
+                    hparams["text"][param[striplen:]] = val
+                else:
+                    continue
+            model = JointNet(
+                input_length=1024, extra_length=config.extra_feat_length, hyperparams=hparams
             )
         run_model(model=model, logger=logger, kwargs=kwargs)
 

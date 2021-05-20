@@ -209,6 +209,8 @@ class TextScorer:
             self.run_model_with_bert(mode, kwargs)
         elif self.model.name == "SeparatedLSTM":
             self.run_model_separated_lstm(mode, kwargs)
+        elif self.model.name == "BiLSTMWithAttention":
+            self.run_model_separated_lstm(mode, kwargs)
         # # 文本数据是分段的，需要构建模型输入数据，即input和seps
         # def build_model_input(text_data, extra_data, indexes):
         #     input = []
@@ -452,7 +454,7 @@ class TextScorer:
                             save_the_best(
                                 self.model,
                                 f1_mean,
-                                kwargs["ids"],
+                                kwargs["ids"][test_inds],
                                 tags[test_inds],
                                 pred_test,
                                 self.logger.name,
@@ -606,7 +608,7 @@ class TextScorer:
                             save_the_best(
                                 self.model,
                                 f1_mean,
-                                kwargs["ids"],
+                                kwargs["ids"][test_inds],
                                 tags[test_inds],
                                 pred_test,
                                 self.logger.name,
@@ -699,7 +701,8 @@ def main(model, logger, kwargs) -> None:
     # embed_data = np.load('../Data/vector_embed.npz')
     # dropped_data = embed_data['dropped_ind']
     print(config.raw_data_file)
-    tag_col = "tag"
+    tag_col = kwargs.get("tag_col", "tag")
+    print(tag_col)
     data = pd.read_csv(
         config.raw_data_file,
         # usecols=["id", "like", "clk", "separated_text", "advid", tag_col],
@@ -716,7 +719,7 @@ def main(model, logger, kwargs) -> None:
     # # data.drop(index=data.index[dropped_data]
     # imp = np.array(data["clk"])
     # beh = np.array(data["bclk"])
-    id = np.array(data["id"])
+    key = np.array(data["key"])
     # advids = data['advid']
     #
     #
@@ -756,7 +759,7 @@ def main(model, logger, kwargs) -> None:
     )
 
     if requires_embedding:
-        embed_file_path = config.embed_data_file + f"_{method_name}.npy"
+        embed_file_path = kwargs.get("embed_file", config.embed_data_file + f"_{method_name}.npy")
         if kwargs["force_embed"]:
             print("Re embedding")
             embed = scorer.bert_embedding(
@@ -810,7 +813,7 @@ def main(model, logger, kwargs) -> None:
     scorer.run_model(
         mode="train",
         extra_features=extra_features,
-        ids=id,
+        ids=key,
         text=text_data,
         params=run_params,
     )
