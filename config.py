@@ -14,6 +14,7 @@ this_path = os.path.realpath(__file__)
 this_folder = os.path.split(this_path)[0]
 # 需要修改下面的文件夹
 data_folder = os.path.join(this_folder, "Data", "kuaishou_data_0514")
+graph_folder = os.path.join(this_folder, "Graphs")
 # data_folder = os.path.join(this_folder, "Data", "sample")
 img_folder = os.path.join(this_folder, "Data", "images")
 video_folder = os.path.join(this_folder, "Data", "videos")
@@ -24,6 +25,7 @@ img_embed_folder = os.path.join(data_folder, "img_embeds")
 # frame_data_folder = os.path.join(this_folder, "Data", "frames")
 frame_data_folder = r"E:\frames"
 video_frame_rate = 5
+
 
 model_save_path = os.path.join(this_folder, "Models")
 bert_path = os.path.join(this_folder, "Models", "Bert")
@@ -196,5 +198,6 @@ advids = [
     "1216",
     "1104",
 ]
-extra_feat_length = len(advids) + 7
+# extra_feat_length = len(advids) + 7
+extra_feat_length = 7
 img_batch_size = 1000

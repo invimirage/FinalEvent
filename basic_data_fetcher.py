@@ -179,7 +179,7 @@ class DataFetcher:
             "report": "report",
             "block": "block",
             "negative": "negative",
-            "paly3s": "play3s",
+            "play3s": "play3s",
             "upload_time": "vtime",
         }
         aggs = {}

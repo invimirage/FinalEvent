@@ -50,28 +50,118 @@ class DataHandler:
                 self.data["advid"],
             )
         )
+        # self.data["play3s"] = self.data["paly3s"]
+        # self.data.drop(columns="paly3s", inplace=True)
 
-    def gen_tag(self, cols: list, thresholds, bin_num=config.bin_number):
+    # 去掉太短的和全是英语的数据
+    def wash_data(self):
+        removed_rows = []
+        too_short = 0
+        full_of_english = 0
+        for i, text in enumerate(self.data["separated_text"]):
+            text = json.loads(text)
+            text_len = sum([len(t) for t in text])
+            if text_len < 10:
+                removed_rows.append(i)
+                too_short += 1
+                continue
+            eng_count = 0
+            for char in ''.join(text):
+                if 'a' <= char <= 'z' or 'A' <= char <= 'Z':
+                    eng_count += 1
+            if eng_count > text_len / 3:
+                removed_rows.append(i)
+                full_of_english += 1
+                # print(''.join(text))
+        print(too_short, full_of_english)
+        self.data.drop(index=self.data.index[removed_rows], inplace=True)
+
+
+    def gen_tag_new(self, cols: list, tag_name=None, threshold=None, bin_num=config.bin_number):
+        """
+        :param cols:  如果cols长度为1，则按照那一列生成标签，如果大于1则按照col[0]/col[1]，且col[1]<threshold则为0
+        :return 生成两种标签，分别是直接分桶和按照advid分中位数，分别为tag_name, mean_tag_name；以及advid按照标签平均数的估计
+        """
+        if tag_name is None:
+            tag_name = "tag_" + '_'.join(cols)
+        if len(cols) == 1:
+            col_name = cols[0]
+            tag_data = np.array(self.data[col_name])
+
+        else:
+            col_son, col_base = self.data[cols[0]], self.data[cols[1]]
+            datalen = len(self.data)
+            for i in range(datalen):
+                if col_base[i] < threshold:
+                    col_son[i] = 0
+                if col_base[i] == 0:
+                    col_base[i] = 1
+            tag_data = np.array(col_son) / np.array(col_base)
+            col_name = "temp"
+            self.data[col_name] = tag_data
+        tag_data, cut_points = bin_tags(tag_data, bin_num)
+        self.data[tag_name] = tag_data
+        self.logger.info(f"{tag_name}:{cut_points}")
+        for i in range(bin_num):
+            self.logger.info(
+                "Tag {}: count {}".format(
+                    i, np.sum(tag_data == i)
+                )
+            )
+        # 获取仅使用advid的标签估计
+        aggs = self.data.groupby(["advid"], as_index=True)[tag_name].agg(
+            ["sum", "count"]
+        )
+        aggs = pd.DataFrame(aggs)
+        aggs_dict = aggs.to_dict(orient="index")
+        mean_vals = []
+        for i, advid in enumerate(self.data["advid"]):
+            grouped_data = aggs_dict[advid]
+            mean_vals.append(grouped_data["sum"] / grouped_data["count"])
+
+        self.data[f"mean_val_{tag_name}"] = mean_vals
+
+        aggs_tag = self.data.groupby(["advid"], as_index=True)[col_name].agg(
+            ["median", "count"]
+        )
+        aggs_tag = pd.DataFrame(aggs_tag)
+        aggs_tag_dict = aggs_tag.to_dict(orient="index")
+        medians = []
+        mean_tag = []
+        for tag_num, advid in zip(self.data[col_name], self.data["advid"]):
+            grouped_data = aggs_tag_dict[advid]
+            median = grouped_data["median"]
+            mean_tag.append(int(tag_num > median))
+            data_count = grouped_data["count"]
+            if data_count < 1000:
+                continue
+            medians.append(median)
+
+        # print(np.max(medians), np.min(medians), np.mean(medians), np.std(medians))
+        self.data[f"mean_{tag_name}"] = mean_tag
+
+    def gen_tag(self, cols: list, tag_name, thresholds, bin_num=config.bin_number):
         # 采用固定阈值的方法，生成标签
         if len(cols) == 1:
+            assert len(thresholds) + 1 == bin_num
             col_name = cols[0]
 
             tag_data = []
             for i in self.data[col_name]:
+                this_tag = 0
                 for j, thre in enumerate(thresholds):
                     if i > thre:
-                        tag_data.append(j+1)
-                        break
-                    if j == len(thresholds) - 1:
-                        tag_data.append(0)
+                        this_tag = j + 1
+                tag_data.append(this_tag)
             tag_data = np.array(tag_data)
-            self.logger.info(
-                "Tag positive count {}, negative count {}".format(
-                    np.sum(tag_data == 1), np.sum(tag_data == 0)
+            for i in range(bin_num):
+                self.logger.info(
+                    "Tag {}: count {}".format(
+                        i, np.sum(tag_data == i)
+                    )
                 )
-            )
-            self.data["tag"] = tag_data
-            aggs = self.data.groupby(["advid"], as_index=True)["tag"].agg(
+            self.data[tag_name] = tag_data
+            aggs = self.data.groupby(["advid"], as_index=True)[tag_name].agg(
                 ["sum", "count"]
             )
             aggs = pd.DataFrame(aggs)
@@ -82,17 +172,25 @@ class DataHandler:
                 grouped_data = aggs_dict[advid]
                 mean_vals.append(grouped_data["sum"] / grouped_data["count"])
 
-            self.data["mean_val"] = mean_vals
+            self.data[f"mean_val_{tag_name}"] = mean_vals
             aggs_tag = self.data.groupby(["advid"], as_index=True)[col_name].agg(
-                ["median"]
+                ["median", "count"]
             )
             aggs_tag = pd.DataFrame(aggs_tag)
             aggs_tag_dict = aggs_tag.to_dict(orient="index")
+            medians = []
             mean_tag = []
             for tag_num, advid in zip(self.data[col_name], self.data["advid"]):
                 grouped_data = aggs_tag_dict[advid]
-                mean_tag.append(int(tag_num > grouped_data["median"]))
-            self.data["mean_tag"] = mean_tag
+                median = grouped_data["median"]
+                mean_tag.append(int(tag_num > median))
+                data_count = grouped_data["count"]
+                if data_count < 1000:
+                    continue
+                medians.append(median)
+
+            # print(np.max(medians), np.min(medians), np.mean(medians), np.std(medians))
+            self.data[f"mean_{tag_name}"] = mean_tag
 
         # 采取在广告主下做归一化以及直接使用比值，threshold定义有所不同
         else:
@@ -105,9 +203,8 @@ class DataHandler:
                 if col_base[i] == 0:
                     col_base[i] = 1
             tag_data = np.array(col_son) / np.array(col_base)
-            self.data["tag"] = tag_data
             binned_tag, cut_points = bin_tags(tag_data, bin_num)
-            self.data["binned_tag"] = binned_tag
+            self.data[tag_name] = binned_tag
             self.logger.info(cut_points)
             aggs = self.data.groupby(["advid"], as_index=True)["tag"].agg(
                 ["mean", "std", "count"]
@@ -179,6 +276,9 @@ class DataHandler:
                 sentence += word
                 # 考虑分句
                 if int(next_sta) - int(end) > 20 or word in ["，", "。"]:
+                    # 如果这个词不是标点，那就加个逗号
+                    if word not in ["，", "。"]:
+                        sentence += "，"
                     # 必分，查看长度
                     if i == word_num - 1 or word == "。":
                         # 长度太短，嫩加就加到上一句
@@ -287,6 +387,9 @@ class DataHandler:
         id_groups = list(self.data["id"])
         print(len(id_groups), len(set(id_groups)))
 
+    def set_keys(self, col="key"):
+        self.data.set_index(col, inplace=True)
+
     # 获取两个信息，第一个是视频上传次数，第二个是距离首次上传的时间
     def get_upload_times(self):
         group_ids = np.array(self.data["group_id"])
@@ -326,6 +429,7 @@ class DataHandler:
             days_to_first_upload.append(relation_groups[group_id][id][0])
         self.data["times_already_uploaded"] = times_already_uploaded
         self.data["days_to_first_upload"] = days_to_first_upload
+        return relation_groups
         # group_number = group_number.value
         # for i in range(group_number+1):
         #     relation_groups.append({})
@@ -375,17 +479,14 @@ class DataHandler:
         self.data["group_id"] = group_ids
         self.store_data()
 
-    def get_tag_in_advid(self):
-        advids = self.data["advid"]
-        all_match = 0
-        for advid in set(list(advids)):
-            matches = []
-            for i in range(config.bin_number):
-                match = sum(self.data["tag"][advids==advid]==i)
-                matches.append(match)
-                print("Advid %d, tag %d, sum %d" % (advid, i, match))
-            all_match += np.max(matches)
-        print(f"Precision {all_match / self.data_len}")
+    def get_advid_f1(self, colname):
+        pred = np.array(np.array(self.data["mean_val_tag_" + colname]) > 0.5, dtype=int)
+        tags = np.array(self.data["tag_" + colname])
+        _, _, f_class, _ = precision_recall_fscore_support(
+            pred, tags
+        )
+        micro_f1 = np.mean(f_class)
+        return micro_f1
 
     def find_scenes(self, video_folder, threshold=50.0):
         video_paths = os.listdir(video_folder)
@@ -467,7 +568,12 @@ def worker(data, data_len, indexes, group_ids, group_number, process_id, lock):
 
 if __name__ == "__main__":
     # data_handler = DataHandler(config.raw_data_file)
-    data_handler = DataHandler(config.raw_data_file, log_level=logging.FATAL)
+    data_handler = DataHandler(config.raw_data_file, log_level=logging.INFO)
+
+    data_handler.wash_data()
+    # 214 short 835 english
+
+    data_handler.store_data()
 
     # data_handler.seperate_text()
 
@@ -491,9 +597,13 @@ if __name__ == "__main__":
 
     # data_handler.seperate_text()
     #
-    data_handler.gen_tag(["cost"], [100, 1000])
+    # tag_names = ["cost", "like", "bclk", "negative", "clk", "play3s", "like_clk", "bclk_clk", "cost_clk", "negative_clk",
+    #              "like_play3s", "bclk_play3s", "cost_play3s", "negative_play3s", "play3s_clk"]
     #
-    data_handler.store_data()
+    # for tag in tag_names:
+    #     data_handler.gen_tag_new(tag.split("_"), threshold=100)
+    # #
+    # data_handler.store_data()
 
     # data_handler.build_sample(1000)
 

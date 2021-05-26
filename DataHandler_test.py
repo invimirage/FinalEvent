@@ -264,14 +264,14 @@ class DataHandler:
     def check_column(self, colname):
         col_data = np.array(self.data[colname])
         ids = np.array(self.data["id"])
-        print(ids[col_data == 1088])
+        print(np.sum(col_data==0))
         val_dict = {}
         for i in col_data:
             try:
                 val_dict[i] += 1
             except:
                 val_dict[i] = 1
-        print(val_dict)
+        # print(val_dict)
         print(col_data.mean(), col_data.max(), col_data.min(), col_data.std())
 
     def check_ids(self):
@@ -483,8 +483,18 @@ def check_tag_relevance():
     data_handler.cal_auc("mean_val", "mean_tag")
 
 if __name__ == "__main__":
-    # data_handler = DataHandler(config.raw_data_file)
-    check_tag_relevance()
+    data_handler = DataHandler(config.raw_data_file)
+    data_handler.check_column("like")
+    data_handler.check_column("share")
+    data_handler.check_column("comment")
+    data_handler.check_column("follow")
+    data_handler.check_column("cancelfollow")
+    data_handler.check_column("report")
+    data_handler.check_column("block")
+    data_handler.check_column("negative")
+    data_handler.check_column("paly3s")
+
+    # check_tag_relevance()
 
     # data_handler.seperate_text()
 

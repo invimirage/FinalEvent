@@ -119,6 +119,19 @@ def adjust_hyperparams(logger, params, sample_number, model_name, run_model, **k
                 "number_epochs": 100,
             },
         )
+    elif model_name == "DoubleNet":
+        all_params = kwargs.get(
+            "test_params",
+            {
+                "hidden_length": [128, 256, 512],
+                # "grad_layer_name": "encoder.layer.23.attention.self.query.weight",
+                "drop_out_rate": 0.5,
+                "batch_size": [400, 800, 1200],
+                "learning_rate": 1e-4,
+                "training_size": 0.8,
+                "number_epochs": 100,
+            },
+        )
     elif model_name == "BertWithCNN":
         # 调试cnn
         lr_high = 2
@@ -134,6 +147,25 @@ def adjust_hyperparams(logger, params, sample_number, model_name, run_model, **k
                 # "grad_layer_name": "encoder.layer.23.attention.self.query.weight",
                 "drop_out_rate": 0.5,
                 "channels": [16, 32, 64],
+                "batch_size": [50, 100, 150],
+                "learning_rate": 1e-4,
+                "training_size": 0.8,
+                "number_epochs": 100,
+            },
+        )
+    elif model_name == "BertWithMLP":
+        # 调试cnn
+        lr_high = 2
+        lr_seps = 10
+        lr_low = 5
+        step = (lr_high - lr_low) / (lr_seps - 1)
+        lrs = 10 ** (-(np.arange(lr_low, lr_high, step)))
+        all_params = kwargs.get(
+            "test_params",
+            {
+                "linear_hidden_length": [32, 64, 128],
+                "grad_layer_name": "encoder.layer.23.attention.self.query.weight",
+                "drop_out_rate": 0.5,
                 "batch_size": [50, 100, 150],
                 "learning_rate": 1e-4,
                 "training_size": 0.8,
@@ -215,7 +247,7 @@ def adjust_hyperparams(logger, params, sample_number, model_name, run_model, **k
                 "video_linear_hidden_length": 128,
                 "video_drop_out_rate": 0.5,
                 "batch_size": 400,
-                "learning_rate": 1e-4,
+                "learning_rate": 1e-5,
                 "training_size": 0.8,
                 "number_epochs": 100,
                 "random": 1,
@@ -251,35 +283,47 @@ def adjust_hyperparams(logger, params, sample_number, model_name, run_model, **k
             model = SeparatedLSTM(
                 input_length=1024,
                 extra_length=config.extra_feat_length,
-                hyperparams=params[model_name],
+                hyperparams=model_param,
             )
         elif model_name == "BiLSTMWithAttention":
             model = BiLSTMWithAttention(
                 input_length=1024,
                 extra_length=config.extra_feat_length,
-                hyperparams=params[model_name],
+                hyperparams=model_param,
+            )
+        elif model_name == "BertWithMLP":
+            model = BertWithMLP(
+                bert_path=config.bert_path,
+                extra_length=config.extra_feat_length,
+                hyperparams=model_param,
             )
         elif model_name == "BertWithCNN":
             model = BertWithCNN(
                 bert_path=config.bert_path,
                 extra_length=config.extra_feat_length,
-                hyperparams=params[model_name],
+                hyperparams=model_param,
+            )
+        elif model_name == "DoubleNet":
+            model = DoubleNet(
+                # 多一维位置信息
+                input_length=1025 + config.extra_feat_length,
+                hyperparams=model_param
             )
         elif model_name == "VideoNet":
             model = VideoNet(
-                extra_length=config.extra_feat_length, hyperparams=params[model_name]
+                extra_length=config.extra_feat_length, hyperparams=model_param
             )
         elif model_name == "VideoNetEmbed":
             model = VideoNetEmbed(
-                extra_length=config.extra_feat_length, hyperparams=params[model_name]
+                extra_length=config.extra_feat_length, hyperparams=model_param
             )
         elif model_name == "JointNet":
             hparams = {
                 "video": {},
                 "text": {},
-                "common": params[model_name]["common"]
+                "common": model_param["common"]
             }
-            for param, val in params[model_name].items():
+            for param, val in model_param.items():
                 if param.startswith('video'):
                     striplen = len('video_')
                     hparams["video"][param[striplen:]] = val
@@ -292,7 +336,6 @@ def adjust_hyperparams(logger, params, sample_number, model_name, run_model, **k
                 input_length=1024, extra_length=config.extra_feat_length, hyperparams=hparams
             )
         run_model(model=model, logger=logger, kwargs=kwargs)
-
 
 def output_logs(self, epoch, kwargs: dict, *args):
     train_pred, train_loss, train_inds, test_pred, test_loss, test_inds = args
@@ -338,8 +381,9 @@ def output_logs(self, epoch, kwargs: dict, *args):
 def sep_train_test(data_length, tag_data, training_size):
     data_indexes = np.arange(data_length)
     tag_data_numpy = tag_data.numpy()
+    # 保持所有测试的训练集测试集相同
     train_inds, test_inds, _, _ = train_test_split(
-        data_indexes, tag_data_numpy, test_size=1 - training_size
+        data_indexes, tag_data_numpy, test_size=1 - training_size, random_state=10086
     )
     return train_inds, test_inds
 
@@ -386,7 +430,7 @@ def save_the_best(model, f1, id, tag, pred, file_name):
         "model": model.state_dict(),
         "f1": f1,
         "id": np.array(id),
-        "pred": pred.cpu().detach().numpy()[:, -1],
+        "pred": pred.cpu().detach().numpy(),
         "tag": tag.cpu().detach().numpy(),
     }
     torch.save(save_dict, save_path, _use_new_zipfile_serialization=False)
@@ -397,10 +441,11 @@ def load_model(file_name, model=None, info=False):
         model_path = os.path.join(config.model_save_path, file_name + ".pth")
     else:
         model_path = file_name
-    print(model_path)
+    # print(model_path)
     try:
         checkpoint = torch.load(model_path)
-    except:
+    except Exception as err:
+        print(err)
         return 0
     if model is not None:
         model.load_state_dict(checkpoint["model"])
@@ -462,7 +507,7 @@ def parse_extra_features(data: pd.DataFrame):
             duration,
             text_len,
             speech_speed,
-            advid_onehot,
+            # advid_onehot,
             times_already_uploaded,
             days_to_first_upload
         )
@@ -472,3 +517,11 @@ def parse_extra_features(data: pd.DataFrame):
 from difflib import SequenceMatcher#导入库
 def similarity(a, b):
     return SequenceMatcher(lambda x: x in [" ", "，", "。"], a, b).quick_ratio()#引用ratio方法，返回序列相似性的度量
+
+import tracemalloc
+def get_memory_status(line_number):
+    pass
+    # tracemalloc.start()
+    # cur, _ = tracemalloc.get_traced_memory()
+    # print(f"Line {line_number}: Current memory usage is {cur / 10**9}GB")
+    # tracemalloc.stop()

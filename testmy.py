@@ -17,8 +17,20 @@ import cv2
 from models import *
 # a = {1:2}
 
-data = pd.read_csv(config.raw_data_file)
-print(data["mean_val"], data["mean_tag"])
+char = "v"
+print(char > "z")
+# print(len("aaaa"))
+# import re
+# pattern = "tag_(.*?)_(.*?)_Sep"
+# name = "tag_negative_test_Separated_LSTM_without_advid"
+# a = re.findall(pattern, name)
+# print(a)
+# embed = np.load(os.path.join(config.img_embed_folder, "100.npz"), allow_pickle=True)["arr_0"][()]
+# for key in embed:
+#     print(key, embed[key].shape)
+#
+# data = pd.read_csv(config.raw_data_file)
+# print(data["mean_val"], data["mean_tag"])
 # a.update({2:1})
 # print(a)
 # m = torch.tensor([1, 2, 3])

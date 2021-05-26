@@ -277,7 +277,7 @@ class VideoScorer:
                             save_the_best(
                                 self.model,
                                 f1_mean,
-                                kwargs["ids"],
+                                kwargs["ids"][test_inds],
                                 tags[test_inds],
                                 pred_test,
                                 self.logger.name,
@@ -324,17 +324,17 @@ class VideoScorer:
             lengths = []
             extra = []
             for data_section_id in indexes:
-                # frame_data_section = frame_data[data_section_id]
-                frame_data_section = self.load_video_data(
-                    frame_data[data_section_id],
-                    frame_rate=config.video_frame_rate,
-                    target_rate=self.model.hyperparams["video"]["frame_rate"],
-                )
+                frame_data_section = frame_data[data_section_id]
+                # frame_data_section = self.load_video_data(
+                #     frame_data[data_section_id],
+                #     frame_rate=config.video_frame_rate,
+                #     target_rate=self.model.hyperparams["video"]["frame_rate"],
+                # )
                 text_data_section = text_data[data_section_id]
                 extra_feat = extra_data[data_section_id]
                 extra.append(extra_feat)
                 text_input.append(torch.tensor(text_data_section, dtype=torch.float32))
-                frame_input.append(torch.tensor(frame_data_section, dtype=torch.float32))
+                frame_input.append(torch.tensor(frame_data_section, device=self.device, dtype=torch.float32))
                 lengths.append(len(text_data_section))
             input_padded = rnn.pad_sequence(text_input, batch_first=True)
             self.logger.debug("padded {}".format(input_padded))
@@ -410,7 +410,7 @@ class VideoScorer:
                             save_the_best(
                                 self.model,
                                 f1_mean,
-                                kwargs["ids"],
+                                kwargs["ids"][test_inds],
                                 tags[test_inds],
                                 pred_test,
                                 self.logger.name,
@@ -550,7 +550,7 @@ class VideoScorer:
                             save_the_best(
                                 self.model,
                                 f1_mean,
-                                kwargs["ids"],
+                                kwargs["ids"][test_inds],
                                 tags[test_inds],
                                 pred_test,
                                 self.logger.name,
@@ -594,14 +594,16 @@ def main(model, logger, kwargs):
     if model.requires_embed:
         try:
             embed = {}
+            get_memory_status("init")
             for embed_file in os.listdir(config.img_embed_folder):
                 embed_file_path = os.path.join(config.img_embed_folder, embed_file)
                 _embed = np.load(embed_file_path, allow_pickle=True)['arr_0'][()]
                 for key in _embed:
                     # 减半
-                    _embed[key] = _embed[key][::4, :]
-                embed.update(_embed)
+                    embed[key] = _embed[key][::4, :]
                 del _embed
+                gc.collect()
+            get_memory_status("video_embed")
             print(len(embed))
         except:
             embed = video_scorer.image_embedding(config.video_folder)
@@ -612,8 +614,12 @@ def main(model, logger, kwargs):
                 frame_data.append(embed[str(row["id"])])
             else:
                 removed_rows.append(i)
+        get_memory_status(617)
+        del embed
+        gc.collect()
+        get_memory_status(619)
     else:
-        extract_frames = kwargs["extract_frames"]
+        extract_frames = kwargs.get("extract_frames", True)
         if extract_frames:
             if not os.path.exists(config.frame_data_folder):
                 os.makedirs(config.frame_data_folder)
@@ -642,9 +648,10 @@ def main(model, logger, kwargs):
     text_data = data["separated_text"].apply(lambda text: json.loads(text))
     tag_data = np.array(data[tag_col])
     video_scorer.set_tag(tag_data)
-    id = np.array(data["id"])
+    key = np.array(data["key"])
     video_sources = config.video_url_prefix + np.array(data["file"])
     extra_feats = parse_extra_features(data)
+    get_memory_status("text embed start")
     # 需要文本信息
     if model.name == "JointNet":
         requires_embed = model.text_net.requires_embed
@@ -653,6 +660,7 @@ def main(model, logger, kwargs):
             print(embed_file_path)
             try:
                 embed_data = np.load(embed_file_path, allow_pickle=True).tolist()
+                get_memory_status("text embed end")
                 # embed_data = [embed_data[i] for i in range(len(embed_data)) if i not in removed_indexes]
             except:
                 print("Text embedding not found! Do embed first!")
@@ -660,7 +668,7 @@ def main(model, logger, kwargs):
             video_scorer.run_model(
                 mode="train",
                 extra_features=extra_feats,
-                ids=id,
+                ids=key,
                 # 文件名 .mp4 or .npy
                 frames=frame_data,
                 video_sources=video_sources,
@@ -675,7 +683,7 @@ def main(model, logger, kwargs):
         video_scorer.run_model(
             mode="train",
             extra_features=extra_feats,
-            ids=id,
+            ids=key,
             # 文件名 .mp4 or .npy
             frames=frame_data,
             video_sources=video_sources,

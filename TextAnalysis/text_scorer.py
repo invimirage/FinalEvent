@@ -211,141 +211,108 @@ class TextScorer:
             self.run_model_separated_lstm(mode, kwargs)
         elif self.model.name == "BiLSTMWithAttention":
             self.run_model_separated_lstm(mode, kwargs)
-        # # 文本数据是分段的，需要构建模型输入数据，即input和seps
-        # def build_model_input(text_data, extra_data, indexes):
-        #     input = []
-        #     seps = []
-        #     for data_section_id in indexes:
-        #         data_section = text_data[data_section_id]
-        #         extra_feat = extra_data[data_section_id]
-        #         section_length = len(data_section)
-        #         seps.append(len(input))
-        #         for i, single_data in enumerate(data_section):
-        #             # 加入分段id
-        #             input.append(list(single_data) + list(extra_feat) + [(i + 1) / section_length])
-        #     seps.append(len(input))
-        #     return torch.tensor(input, dtype=torch.float32).to(self.device), seps
-        #
-        #
-        # self.logger.info("Running model, %s" % mode)
-        #
-        # optimizer = torch.optim.Adam(self.model.parameters(), lr=lr)
-        # extra_feats = kwargs['extra_features']
-        # text_embed_data = self.data_input
-        # tags = self.tag.to(torch.int64)
-        # self.logger.debug('Training data length: %d\n Tag data length: %d' % (len(text_embed_data), self.data_len))
-        # assert mode in ["train", "predict"]
-        # if mode == "train":
-        #     indexes = np.arange(self.data_len)
-        #     np.random.shuffle(indexes)
-        #     train_len = round(self.data_len * trainning_size)
-        #     train_inds = indexes[:train_len]
-        #     self.logger.info('Training data length: %d' % len(train_inds))
-        #     test_inds = indexes[train_len:]
-        #     # 生成的训练、测试数据供测试使用
-        #     # 取训练集的1/10
-        #     train_inds_select = train_inds[::4]
-        #     training_sample_input, training_sample_seps = build_model_input(text_embed_data, extra_feats, train_inds_select)
-        #     training_sample_tags = tags[train_inds_select]
-        #
-        #     testing_input, testing_seps = build_model_input(text_embed_data, extra_feats, test_inds)
-        #     testing_tags = tags[test_inds]
-        #
-        #     n_batch = math.ceil(len(train_inds) / batch_size)
-        #     self.logger.debug("Batch number: %d" % n_batch)
-        #     best_micro_f1 = 0
-        #     best_epoch = 0
-        #     for epoch in range(num_epoch):
-        #
-        #         # if epoch % 10 == 0:
-        #         #     self.logger.info('Epoch number: %d' % epoch)
-        #
-        #         if epoch % 1 == 0:
-        #             cpc_pred_train, train_loss = self.model(training_sample_input, training_sample_tags.to(self.device), separates=training_sample_seps)
-        #             cpc_pred_test, test_loss = self.model(testing_input, testing_tags.to(self.device), separates=testing_seps, detail=True)
-        #             cpc_pred_worst = (
-        #                 cpc_pred_test.cpu().detach().numpy()[:, 0].flatten()
-        #             )
-        #             top10 = np.array(cpc_pred_worst).argsort()[::-1][0:10]
-        #             self.logger.info("Worst Top 10: {}".format(kwargs["ids"][top10]))
-        #             for i in kwargs["text"][top10]:
-        #                 self.logger.info(i)
-        #             cpc_pred_best = (
-        #                 cpc_pred_test.cpu().detach().numpy()[:, -1].flatten()
-        #             )
-        #             top10 = np.array(cpc_pred_best).argsort()[::-1][0:10]
-        #             self.logger.info("Best Top 10: {}".format(kwargs["ids"][top10]))
-        #             for i in kwargs["text"][top10]:
-        #                 self.logger.info(i)
-        #             cpc_pred_train = np.argmax(cpc_pred_train.cpu().detach(), axis=1)
-        #             cpc_pred_test = np.argmax(cpc_pred_test.cpu().detach(), axis=1)
-        #             train_tags_cpu = training_sample_tags.cpu()
-        #             test_tags_cpu = testing_tags.cpu()
-        #             self.logger.info("------------Epoch %d------------" % epoch)
-        #             self.logger.info("Training set")
-        #             self.logger.info("Loss: %.4lf" % train_loss.cpu().detach())
-        #             p_class, r_class, f_class, _ = precision_recall_fscore_support(
-        #                 cpc_pred_train, train_tags_cpu
-        #             )
-        #             self.logger.info(p_class)
-        #             self.logger.info(r_class)
-        #             self.logger.info(f_class)
-        #             self.logger.info("Testing set")
-        #             self.logger.info("Loss: %.4lf" % test_loss.cpu().detach())
-        #             p_class, r_class, f_class, _ = precision_recall_fscore_support(
-        #                 cpc_pred_test, test_tags_cpu
-        #             )
-        #             self.logger.info(p_class)
-        #             self.logger.info(r_class)
-        #             self.logger.info(f_class)
-        #             f1_mean = np.mean(f_class)
-        #             if f1_mean > best_micro_f1:
-        #                 best_micro_f1 = f1_mean
-        #                 best_epoch = epoch
-        #             self.logger.info('Best Micro-F1: %.6lf, epoch %d' % (best_micro_f1, best_epoch))
-        #
-        #         for i in range(n_batch):
-        #             start = i * batch_size
-        #             # 别忘了这里用了sigmoid归一化
-        #             data_inds = train_inds[start : start + batch_size]
-        #             # data_inds = [9871, 21763, 30344, 3806, 7942]
-        #             # print(data_inds)
-        #             # print(separates)
-        #             data, seps = build_model_input(text_embed_data, extra_feats, data_inds)
-        #             _tags = tags[data_inds].to(self.device)
-        #             cpc_pred, loss = self.model(
-        #                 data, _tags, seps
-        #             )  # text_hashCodes是一个32-dim文本特征
-        #             optimizer.zero_grad()
-        #             self.logger.debug(loss)
-        #             loss.backward()
-        #             for name, param in self.model.named_parameters():
-        #                 self.logger.debug(param.grad)
-        #             optimizer.step()
-        #
-        #         np.random.shuffle(train_inds)
-        #
-        #         for name, param in self.model.named_parameters():
-        #             if name == "fcs.2.bias":
-        #                 self.logger.debug(name, param)
-        # else:
-        #     pass
-        #     # n_batch = self.data_len // batch_size
-        #     # for i in range(n_batch):
-        #     #     start = i * batch_size
-        #     #     # 别忘了这里用了sigmoid归一化
-        #     #     cpc_pred = self.model(
-        #     #         input_data[:, start : start + batch_size]
-        #     #     )  # text_hashCodes是一个32-dim文本特征
-        #     #
-        #     #     loss = F.mse_loss(cpc_pred, tags)
+        elif self.model.name == "DoubleNet":
+            self.run_model_sep_dnn(mode, kwargs)
+        elif self.model.name == "BertWithMLP":
+            self.run_model_with_bert(mode, kwargs)
 
-    # def get_results(self, text, tag, pred, filepath):
-    #     df = pd.DataFrame(columns=('text', 'pred', 'tag'))
-    #     df['text'] = list(text)
-    #     df['pred'] = list(pred.cpu().detach().numpy()[:, 1])
-    #     df['tag'] = list(tag.cpu().detach().numpy())
-    #     df.to_csv(filepath, index=False)
+
+    def run_model_sep_dnn(self, mode, kwargs):
+        batch_size = kwargs["params"]["batch_size"]
+        lr = kwargs["params"]["learning_rate"]
+        training_size = kwargs["params"]["training_size"]
+        num_epoch = kwargs["params"]["number_epochs"]
+        random_batching = kwargs["params"]["random"] == 1
+        # 文本数据是分段的，需要构建模型输入数据，即input和seps
+        def feed_model(text_data, extra_data, tag_data, indexes, requires_grad=True):
+            input = []
+            seps = []
+            for data_section_id in indexes:
+                data_section = text_data[data_section_id]
+                extra_feat = extra_data[data_section_id]
+                section_length = len(data_section)
+                seps.append(len(input))
+                for i, single_data in enumerate(data_section):
+                    # 加入分段id
+                    input.append(list(single_data) + list(extra_feat) + [(i + 1) / section_length])
+            seps.append(len(input))
+            _tag_data = tag_data[indexes].to(self.device)
+            _input = torch.tensor(input, device=self.device, dtype=torch.float32)
+            if not requires_grad:
+                with torch.no_grad():
+                    pred, loss = self.model(_input, _tag_data, separates=seps)
+            else:
+                pred, loss = self.model(_input, _tag_data, separates=seps)
+            return pred, loss
+
+
+        self.logger.info("Running model, %s" % mode)
+
+        optimizer = torch.optim.Adam(self.model.parameters(), lr=lr)
+        extra_feats = kwargs['extra_features']
+        text_embed_data = self.data_input
+        tags = self.tag.to(torch.int64)
+        self.logger.debug('Training data length: %d\n Tag data length: %d' % (len(text_embed_data), self.data_len))
+        assert mode in ["train", "predict"]
+        if mode == "train":
+            train_inds, test_inds = sep_train_test(self.data_len, tags, training_size)
+            # 生成的训练、测试数据供测试使用
+            # 取训练集的1/10
+            train_inds_sample = train_inds[:: int(training_size // (1 - training_size))]
+
+            n_batch = math.ceil(len(train_inds) / batch_size)
+            self.logger.debug("Batch number: %d" % n_batch)
+            best_micro_f1 = 0
+            best_epoch = 0
+            for epoch in range(num_epoch):
+                if epoch % 1 == 0:
+                    pred_train, train_loss = feed_model(text_embed_data, extra_feats, tags, train_inds_sample, requires_grad=False)
+                    pred_test, test_loss = feed_model(text_embed_data, extra_feats, tags, test_inds, requires_grad=False)
+                    f1_mean = output_logs(
+                        self,
+                        epoch,
+                        kwargs,
+                        pred_train,
+                        train_loss,
+                        train_inds_sample,
+                        pred_test,
+                        test_loss,
+                        test_inds,
+                    )
+                    if f1_mean > best_micro_f1:
+                        best_micro_f1 = f1_mean
+                        best_epoch = epoch
+                        if f1_mean > self.best_f1:
+                            self.best_f1 = f1_mean
+                            save_the_best(
+                                self.model,
+                                f1_mean,
+                                kwargs["ids"][test_inds],
+                                tags[test_inds],
+                                pred_test,
+                                self.logger.name,
+                            )
+                    self.logger.info('Best Micro-F1: %.6lf, epoch %d' % (best_micro_f1, best_epoch))
+
+                    if epoch - best_epoch > 10:
+                        break
+
+                train_batches = build_batch(
+                    train_inds, batch_size, random_batching, tags
+                )
+                for batch_inds in train_batches:
+                    _, loss = feed_model(
+                        text_embed_data, extra_feats, tags, batch_inds
+                    )  # text_hashCodes是一个32-dim文本特征
+                    optimizer.zero_grad()
+                    self.logger.debug(loss)
+                    loss.backward()
+                    for name, param in self.model.named_parameters():
+                        self.logger.debug(param.grad)
+                    optimizer.step()
+
+        else:
+            pass
 
     def run_model_separated_lstm(self, mode, kwargs):
         batch_size = kwargs["params"]["batch_size"]
@@ -528,14 +495,14 @@ class TextScorer:
                 extra.append(extra_data[data_section_id])
             _tag_data = tag_data[indexes].to(self.device)
             _extra_data = torch.tensor(extra, dtype=torch.float32).to(self.device)
-            input = [torch.tensor(data, device=self.device) for data in input]
+            input_tensors = [torch.tensor(data, device=self.device) for data in input]
             if train:
-                pred, loss = self.model(input, _extra_data, _tag_data)
+                pred, loss = self.model(input_tensors, _extra_data, _tag_data)
                 return pred, loss
             else:
                 # self.model.eval()
                 with torch.no_grad():
-                    pred, loss = self.model(input, _extra_data, _tag_data)
+                    pred, loss = self.model(input_tensors, _extra_data, _tag_data)
                     loss = loss.cpu().detach()
                     pred = pred.cpu().detach()
                 # self.model.train()
@@ -697,6 +664,7 @@ def main(model, logger, kwargs) -> None:
     embed_type = kwargs["embed_type"]
     requires_embedding = model.requires_embed
     run_params = model.hyperparams["common"]
+    print(run_params)
     assert embed_type in ["api", "local"]
     # embed_data = np.load('../Data/vector_embed.npz')
     # dropped_data = embed_data['dropped_ind']
