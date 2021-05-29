@@ -21,9 +21,58 @@ from FinalEvent import models
 from sklearn.metrics import precision_recall_fscore_support
 from utils import *
 import time
-
+from multiprocessing import Process, Array, Value, Lock
 import shutil
+def extract_frame_worker(video_files, too_short, process_id, kwargs):
+    def rgb_mean_dif(img1, img2):
+        rgb1 = np.mean(img1, axis=(1, 2))
+        rgb2 = np.mean(img2, axis=(1, 2))
+        return np.sum(np.abs(rgb1 - rgb2))
 
+    ids_dict = kwargs["ids_dict"]
+    video_folder = kwargs["video_folder"]
+    img_size = kwargs["img_size"]
+    target_framenum = kwargs["target_framenum"]
+    target_file_folder = kwargs["target_file_folder"]
+    logger = kwargs["logger"]
+
+    for i, video_file in enumerate(video_files):
+        if i % 100 == 0:
+            print("Process %d: Extracting frames, at %d/%d" % (process_id, i, len(video_files)))
+        id = video_file.split(".")[0]
+        if not int(id) in ids_dict.keys():
+            continue
+        frames = []
+        diffs = []
+        video_path = os.path.join(video_folder, video_file)
+        vc = cv2.VideoCapture(video_path)
+        total_frames = vc.get(cv2.CAP_PROP_FRAME_COUNT)
+        frame_count = 0
+        while True:
+            rval, frame = vc.read()
+            if not rval:
+                break
+            frame = cv2.resize(
+                frame, (img_size, img_size), interpolation=cv2.INTER_LANCZOS4
+            )
+            frame = np.transpose(frame, (2, 0, 1))
+            if len(frames) > 0:
+                diffs.append(rgb_mean_dif(frame, frames[-1]))
+            frames.append(frame)
+
+            # self.logger.debug(frame.shape)
+            frame_count += 1
+        if frame_count <= target_framenum:
+            frames = [frames[0]] * (target_framenum - frame_count) + frames
+            if frame_count < target_framenum:
+                too_short.value += 1
+        else:
+            threshold = list(sorted(diffs, reverse=True))[target_framenum - 1]
+            frames = [frames[i] for i in range(frame_count) if i == 0 or diffs[i - 1] > threshold]
+        frames = np.array(frames)
+        filename = f"{id}.npy"
+        np.save(os.path.join(target_file_folder, filename), frames)
+        vc.release()
 
 class VideoScorer:
     def __init__(self, **kwargs):
@@ -40,6 +89,58 @@ class VideoScorer:
         self.tag = torch.tensor(tag_data)
         self.data_len = self.tag.shape[0]
         self.logger.info("Data length: %d" % self.data_len)
+
+    # For stam, extract frames at fixed number
+    def extract_frames_fixed_number(self, ids, video_folder, target_file_folder, force=False):
+        # 加速查找
+        ids_dict = {}
+        for id in ids:
+            ids_dict[id] = 0
+        video_files = list(
+            filter(
+                lambda x: x.endswith(".mp4") and not x.endswith("_origin.mp4"),
+                os.listdir(video_folder),
+            )
+        )
+        if not force:
+            already_extracted = list(
+                map(lambda x: x.split(".")[0] + ".mp4", os.listdir(target_file_folder))
+            )
+            video_files = [
+                video_file
+                for video_file in video_files
+                if video_file not in already_extracted
+            ]
+        else:
+            input("Empty?")
+            shutil.rmtree(target_file_folder)
+            os.makedirs(target_file_folder)
+        np.random.shuffle(video_files)
+        video_framerate = config.video_frame_rate
+        try:
+            target_framenum = self.model.hyperparams["frames_per_clip"]
+            img_size = self.model.hyperparams["img_size"]
+        except KeyError:
+            target_framenum = self.model.hyperparams["video"]["frames_per_clip"]
+            img_size = self.model.hyperparams["video"]["img_size"]
+        process_number = 8
+        process_pool = []
+        too_short = Value('i', 0)
+        kwargs = {
+            "ids_dict": ids_dict,
+            "video_folder": video_folder,
+            "img_size": img_size,
+            "target_framenum": target_framenum,
+            "target_file_folder": target_file_folder,
+            "logger": self.logger
+        }
+        for i in range(process_number):
+            p = Process(target=extract_frame_worker, args=(video_files[i::process_number], too_short, i, kwargs))
+            process_pool.append(p)
+            p.start()
+        for i in range(process_number):
+            process_pool[i].join()
+        self.logger.info(f"{too_short.value} videos don't have {target_framenum} frames")
 
     # convert videos to numpy data
     def extract_frames(self, video_folder, target_file_folder, force=False):
@@ -152,6 +253,138 @@ class VideoScorer:
             self.run_video_net_with_embed(mode, kwargs)
         if self.model.name == "JointNet":
             self.run_video_text_net(mode, kwargs)
+        if self.model.name == "VideoAttention":
+            self.run_stam(mode, kwargs)
+
+    def run_stam(self, mode, kwargs):
+        batch_size = kwargs["params"]["batch_size"]
+        lr = kwargs["params"]["learning_rate"]
+        training_size = kwargs["params"]["training_size"]
+        num_epoch = kwargs["params"]["number_epochs"]
+        frames = kwargs["frames"]
+
+        # 文本数据是分段的，需要构建模型输入数据，即input和seps
+        def feed_model(frame_data, extra_data, tag_data, indexes, requires_grad=True):
+            input = []
+            lengths = []
+            extra = []
+            for data_section_id in indexes:
+                data_section = self.load_video_data(
+                    frame_data[data_section_id]
+                )
+                extra_feat = extra_data[data_section_id]
+                extra.append(extra_feat)
+                input.append(torch.tensor(data_section, dtype=torch.float32))
+                lengths.append(len(data_section))
+            input = torch.cat(input, dim=0).to(self.device)
+            _tag_data = tag_data[indexes].to(self.device)
+            _extra_data = torch.tensor(extra, dtype=torch.float32).to(self.device)
+            if not requires_grad:
+                with torch.no_grad():
+                    pred, loss = self.model(
+                        input,
+                        _extra_data,
+                        tag=_tag_data,
+                    )
+            else:
+                pred, loss = self.model(
+                    input,
+                    _extra_data,
+                    tag=_tag_data,
+                )
+            # print(run_model_end - run_model_sta, prepare_data_end - prepare_data_sta)
+            return pred, loss
+
+        self.logger.info("Running model, %s" % mode)
+
+        optimizer = torch.optim.Adam(self.model.parameters(), lr=lr)
+        extra_feats = kwargs["extra_features"]
+        tags = self.tag.to(torch.int64)
+        assert mode in ["train", "predict"]
+        if mode == "train":
+            train_inds, test_inds = sep_train_test(self.data_len, tags, training_size)
+            train_inds_sample = train_inds[:: int(training_size // (1 - training_size))]
+            self.logger.info("Training data length: %d" % len(train_inds))
+
+            # 生成的训练、测试数据供测试使用
+            best_micro_f1 = 0
+            best_epoch = 0
+            for epoch in range(num_epoch):
+                if epoch % kwargs["print_interval"] == 0:
+                    train_batches = build_batch(
+                        train_inds_sample, batch_size, False, tags[train_inds_sample]
+                    )
+                    test_batches = build_batch(test_inds, batch_size, False, tags)
+                    training_preds = []
+                    training_losses = []
+                    testing_preds = []
+                    testing_losses = []
+                    for batch_inds in train_batches:
+                        pred, loss = feed_model(
+                            frames, extra_feats, tags, batch_inds, requires_grad=False
+                        )
+                        training_preds.append(pred)
+                        training_losses.append(loss.unsqueeze(0))
+                    pred_train = torch.cat(training_preds, dim=0)
+                    train_loss = torch.mean(torch.cat(training_losses, dim=0))
+                    for batch_inds in test_batches:
+                        pred, loss = feed_model(
+                            frames, extra_feats, tags, batch_inds, requires_grad=False
+                        )
+                        testing_preds.append(pred)
+                        testing_losses.append(loss.unsqueeze(0))
+                    pred_test = torch.cat(testing_preds, dim=0)
+                    test_loss = torch.mean(torch.cat(testing_losses, dim=0))
+
+                    f1_mean = output_logs(
+                        self,
+                        epoch,
+                        kwargs,
+                        pred_train,
+                        train_loss,
+                        train_inds_sample,
+                        pred_test,
+                        test_loss,
+                        test_inds,
+                    )
+                    if f1_mean > best_micro_f1:
+                        best_micro_f1 = f1_mean
+                        best_epoch = epoch
+                        if f1_mean > self.best_f1:
+                            self.best_f1 = f1_mean
+                            save_the_best(
+                                self.model,
+                                f1_mean,
+                                kwargs["ids"][test_inds],
+                                tags[test_inds],
+                                pred_test,
+                                self.logger.name,
+                            )
+                    self.logger.info(
+                        "Best Micro-F1: %.6lf, epoch %d" % (best_micro_f1, best_epoch)
+                    )
+                    if epoch - best_epoch > 10:
+                        break
+
+                train_batches = build_batch(train_inds, batch_size, True, tags)
+                for batch_inds in train_batches:
+                    pred, loss = feed_model(
+                        frames, extra_feats, tags, batch_inds
+                    )  # text_hashCodes是一个32-dim文本特征
+                    optimizer.zero_grad()
+                    self.logger.debug(loss)
+                    loss.backward()
+                    # for name, param in self.model.named_parameters():
+                    #     self.logger.debug(param.grad)
+                    optimizer.step()
+
+                np.random.shuffle(train_inds)
+
+                for name, param in self.model.named_parameters():
+                    if name == "fcs.2.bias":
+                        self.logger.debug(name, param)
+        else:
+            pass
 
     # video_input_folder包含所有video的numpy数组，使用id来确定顺序
     def image_embedding(self, video_input_folder):
@@ -624,9 +857,12 @@ def main(model, logger, kwargs):
             if not os.path.exists(config.frame_data_folder):
                 os.makedirs(config.frame_data_folder)
             logger.info("Loading video frames")
-            video_scorer.extract_frames(
-                config.video_folder, config.frame_data_folder, kwargs.get("force", False)
-            )
+            if video_scorer.model.name != "VideoAttention":
+                video_scorer.extract_frames(
+                    config.video_folder, config.frame_data_folder, kwargs.get("force", False)
+                )
+            else:
+                video_scorer.extract_frames_fixed_number(data["id"], config.video_folder, config.frame_data_folder, kwargs.get("force", False))
         #     video_files = os.listdir(config.frame_data_folder)
         # else:
         #     video_files = video_scorer.video_checker(config.video_folder)

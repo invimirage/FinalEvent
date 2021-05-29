@@ -22,7 +22,7 @@ from efficientnet_pytorch import EfficientNet
 import math
 import torch.nn.utils.rnn as rnn
 from utils import *
-
+from stam.models.transformer_model import STAM_224 as STAM
 # ——————构造模型——————
 
 
@@ -203,16 +203,16 @@ class BiLSTMWithAttention(MyModule):
         input_length = input_length
         hidden_length = hyperparams["hidden_length"]
         layer_number = hyperparams["layer_number"]
-        linear_hidden_length = hyperparams["hidden_length"]
+        linear_hidden_length = hyperparams["linear_hidden_length"]
         drop_out_rate = hyperparams["drop_out_rate"]
         self.drop_out_rate = drop_out_rate
         self.lstm = nn.LSTM(
             input_size=input_length,
-            hidden_size=hyperparams["hidden_length"],
-            num_layers=hyperparams["layer_number"],
+            hidden_size=hidden_length,
+            num_layers=layer_number,
             batch_first=True,
             bidirectional=True,
-            dropout=hyperparams["drop_out_rate"],
+            dropout=drop_out_rate,
         )
         # 2代表双向
         self.attention_weight = torch.ones((2*hidden_length, 1), dtype=torch.float32, requires_grad=True)
@@ -265,7 +265,7 @@ class SeparatedLSTM(MyModule):
         input_length = input_length
         hidden_length = hyperparams["hidden_length"]
         layer_number = hyperparams["layer_number"]
-        linear_hidden_length = hyperparams["hidden_length"]
+        linear_hidden_length = hyperparams["linear_hidden_length"]
         drop_out_rate = hyperparams["drop_out_rate"]
         self.lstm = nn.LSTM(
             input_size=input_length,
@@ -283,6 +283,8 @@ class SeparatedLSTM(MyModule):
             nn.Dropout(drop_out_rate),
             nn.Linear(linear_hidden_length, config.bin_number),
         )
+        # for name, param in self.named_parameters():
+        #     print(name, param.shape)
 
     def extract_features(self, text_data):
         lstm_out, (hn, cn) = self.lstm(text_data)
@@ -481,6 +483,50 @@ class PictureNet(MyModule):
             loss = 0
         return out_probs, loss
         # print(output.shape)
+
+class VideoAttention(MyModule):
+    def __init__(self, extra_length, hyperparams):
+        super().__init__(name="VideoAttention", requires_embed=False, hyperparams=hyperparams)
+        class Args:
+            pass
+        linear_length = hyperparams["linear_length"]
+        linear_hidden_length = hyperparams["linear_hidden_length"]
+        frames_per_clip = hyperparams["frames_per_clip"]
+        args = Args()
+        args.frames_per_clip = frames_per_clip
+        args.input_size = hyperparams["img_size"]
+        model_params = {'args': args, 'num_classes': linear_length}
+        self.stam_model = STAM(model_params)
+        state = torch.load(config.stam_path)['model']
+        # for layer, param in state.items():
+        #     print(layer, param.shape)
+        # for layer, param in self.stam_model.named_parameters():
+        #     print(layer, param.shape)
+        self.stam_model.load_state_dict(state, strict=False)
+        # for layer, param in self.stam_model.named_parameters():
+        #     print(layer)
+        fc_input_length = extra_length + linear_length
+        self.fcs = nn.Sequential(
+            nn.Linear(
+                fc_input_length, linear_hidden_length
+            ),
+            nn.ReLU(),
+            nn.Dropout(hyperparams["drop_out_rate"]),
+            nn.Linear(linear_hidden_length, config.bin_number),
+        )
+
+    def forward(self, video_input, extra_feats, tag=None):
+        stam_output = self.stam_model(video_input)
+        fc_input = torch.cat((stam_output, extra_feats), dim=1)
+        output = self.fcs(fc_input)
+        out_probs = F.softmax(output, dim=1).detach()
+        # print(tag)
+        if tag is not None:
+            criterion = nn.CrossEntropyLoss()
+            loss = criterion(output, tag)
+        else:
+            loss = 0
+        return out_probs, loss
 
 # 更改video更改requires_embed、还有两处注释，
 class JointNet(MyModule):

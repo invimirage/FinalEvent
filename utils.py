@@ -253,6 +253,23 @@ def adjust_hyperparams(logger, params, sample_number, model_name, run_model, **k
                 "random": 1,
             },
         )
+    elif model_name == "VideoAttention":
+        all_params = kwargs.get(
+            "test_params",
+            {
+                "linear_length": 512,
+                "linear_hidden_length": 128,
+                "frames_per_clip": 16,
+                "grad_layer_name": "aaa_blocks.31",
+                "img_size": 180,
+                "drop_out_rate": 0.5,
+                "batch_size": 400,
+                "learning_rate": 1e-5,
+                "training_size": 0.8,
+                "number_epochs": 100,
+                "random": 1,
+            }
+        )
     params_to_test = {}
     for param in all_params:
         if isinstance(all_params[param], Iterable) and not isinstance(
@@ -317,6 +334,8 @@ def adjust_hyperparams(logger, params, sample_number, model_name, run_model, **k
             model = VideoNetEmbed(
                 extra_length=config.extra_feat_length, hyperparams=model_param
             )
+        elif model_name == "VideoAttention":
+            model = VideoAttention(extra_length=config.extra_feat_length, hyperparams=model_param)
         elif model_name == "JointNet":
             hparams = {
                 "video": {},
@@ -422,7 +441,6 @@ def build_batch(
             batch_data.append(data_indexes[sta:end])
     return batch_data
 
-
 def save_the_best(model, f1, id, tag, pred, file_name):
     print(f"Saving model, F1 {f1}")
     save_path = os.path.join(config.model_save_path, file_name + ".pth")
@@ -507,7 +525,7 @@ def parse_extra_features(data: pd.DataFrame):
             duration,
             text_len,
             speech_speed,
-            # advid_onehot,
+            advid_onehot,
             times_already_uploaded,
             days_to_first_upload
         )

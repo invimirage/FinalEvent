@@ -17,14 +17,16 @@ from VideoAnalysis.video_scorer import main as video_scorer
 
 # 日常要做的实验， 5月12日：测试加入extra data， 测试使用CLS代替Mean Pooling， 测试开放bert参数
 test_mode = False
+
 # without cls
 with open(config.parameter_file) as f:
     params = json.load(f)
+
 test_params = {
-    "hidden_length": [128, 256, 512],
-    "layer_number": [1, 2, 3],
-    "linear_hidden_length": [64, 128],
-    "drop_out_rate": [0.5, 0.4],
+    "hidden_length": [512],
+    "layer_number": [2, 3],
+    "linear_hidden_length": [256, 128],
+    "drop_out_rate": [0.5],
     "batch_size": [400, 600, 800],
     "learning_rate": 1e-4,
     "training_size": 0.8,
@@ -82,12 +84,12 @@ tag_names = ["cost", "like", "bclk", "negative", "clk", "play3s", "like_clk", "b
     # )
 
 tag_name = "mean_tag_like"
-# logger = init_logger(
-#     log_level=logging.INFO,
-#     name="Separated_LSTM_mean_like",
-#     write_to_file=True,
-#     clean_up=True,
-# )
+logger = init_logger(
+    log_level=logging.INFO,
+    name="Separated_LSTM_mean_like",
+    write_to_file=True,
+    clean_up=False,
+)
 # adjust_hyperparams(
 #     logger,
 #     params,
@@ -116,115 +118,51 @@ tag_name = "mean_tag_like"
 # )
 
 # double_net
-test_params = {
-    "hidden_length": [128, 256, 512],
-    "drop_out_rate": [0.5, 0.4, 0.6],
-    "batch_size": [400, 800, 1200],
-    "learning_rate": 1e-4,
-    "training_size": 0.8,
-    "number_epochs": 100,
-}
-logger = init_logger(
-    log_level=logging.INFO,
-    name="DoubleNet_mean_like_cls",
-    write_to_file=True,
-    clean_up=True,
-)
-adjust_hyperparams(
-    logger,
-    params,
-    sample_number=10,
-    model_name="DoubleNet",
-    run_model=text_scorer,
-    test_params=test_params,
-    embed_type="local",
-    force_embed=False,
-    use_cls=True,
-    tag_col=tag_name,
-    embed_file=os.path.join(config.data_folder, "vector_embed_Separated_LSTM_mean_like_cls.npy"),
-    test_mode=test_mode
-)
-
-# with cls
-test_params = {
-    "hidden_length": [128, 256, 512],
-    "layer_number": [1, 2, 3],
-    "linear_hidden_length": [64, 128],
-    "drop_out_rate": [0.5, 0.4],
-    "batch_size": [400, 600, 800],
-    "learning_rate": 1e-4,
-    "training_size": 0.8,
-    "number_epochs": 100,
-}
-logger = init_logger(
-    log_level=logging.INFO,
-    name="Separated_LSTM_mean_like_cls",
-    write_to_file=True,
-    clean_up=False,
-)
-adjust_hyperparams(
-    logger,
-    params,
-    sample_number=5,
-    model_name="SeparatedLSTM",
-    run_model=text_scorer,
-    test_params=test_params,
-    embed_type="local",
-    force_embed=False,
-    use_cls=True,
-    tag_col=tag_name,
-    test_mode=test_mode
-)
-
-test_params = {
-    "hidden_length": [128, 256, 512],
-    "layer_number": [2, 3],
-    "linear_hidden_length": [64, 128],
-    "drop_out_rate": [0.5, 0.4],
-    "batch_size": [400, 600, 800],
-    "learning_rate": 1e-4,
-    "training_size": 0.8,
-    "number_epochs": 100,
-}
-logger = init_logger(
-    log_level=logging.INFO,
-    name="Attention_LSTM_mean_like_cls",
-    write_to_file=True,
-    clean_up=False,
-)
-adjust_hyperparams(
-    logger,
-    params,
-    sample_number=5,
-    model_name="BiLSTMWithAttention",
-    run_model=text_scorer,
-    test_params=test_params,
-    embed_type="local",
-    force_embed=False,
-    use_cls=True,
-    test_mode=test_mode,
-    tag_col=tag_name,
-    embed_file=os.path.join(config.data_folder, "vector_embed_Separated_LSTM_mean_like_cls.npy")
-)
-
-# with more texts
 # test_params = {
 #     "hidden_length": [128, 256, 512],
-#     "layer_number": [1, 2, 3],
-#     "linear_hidden_length": [64, 128],
-#     "drop_out_rate": [0.5, 0.4],
-#     "batch_size": [400, 600, 800],
+#     "drop_out_rate": [0.5, 0.4, 0.6],
+#     "batch_size": [400, 800, 1200],
 #     "learning_rate": 1e-4,
 #     "training_size": 0.8,
 #     "number_epochs": 100,
 # }
-
-
 # logger = init_logger(
 #     log_level=logging.INFO,
-#     name="Separated_LSTM_mean_like_neighbors_no_center",
+#     name="DoubleNet_mean_like_cls",
 #     write_to_file=True,
 #     clean_up=True,
+# )
+# adjust_hyperparams(
+#     logger,
+#     params,
+#     sample_number=10,
+#     model_name="DoubleNet",
+#     run_model=text_scorer,
+#     test_params=test_params,
+#     embed_type="local",
+#     force_embed=False,
+#     use_cls=True,
+#     tag_col=tag_name,
+#     embed_file=os.path.join(config.data_folder, "vector_embed_Separated_LSTM_mean_like_cls.npy"),
+#     test_mode=test_mode
+# )
+
+# with cls
+# test_params = {
+#     "hidden_length": [512],
+#     "layer_number": [3],
+#     "linear_hidden_length": [512],
+#     "drop_out_rate": [0.5],
+#     "batch_size": [20],
+#     "learning_rate": 1e-4,
+#     "training_size": 0.8,
+#     "number_epochs": 100,
+# }
+# logger = init_logger(
+#     log_level=logging.INFO,
+#     name="Separated_LSTM_mean_like_cls",
+#     write_to_file=True,
+#     clean_up=False,
 # )
 # adjust_hyperparams(
 #     logger,
@@ -235,28 +173,94 @@ adjust_hyperparams(
 #     test_params=test_params,
 #     embed_type="local",
 #     force_embed=False,
-#     use_cls=False,
-#     neighbor=1,
-#     only_center=False,
-#     max_len=100,
-#     test_mode=test_mode,
+#     use_cls=True,
 #     tag_col=tag_name,
+#     test_mode=test_mode
 # )
+
+test_params = {
+    "hidden_length": [256, 512],
+    "layer_number": [2, 3],
+    "linear_hidden_length": [256, 128],
+    "drop_out_rate": [0.5],
+    "batch_size": [100, 400, 600, 800],
+    "learning_rate": 1e-4,
+    "training_size": 0.8,
+    "number_epochs": 100,
+}
+logger = init_logger(
+    log_level=logging.INFO,
+    name="Attention_LSTM_mean_like_cls",
+    write_to_file=True,
+    clean_up=False,
+)
 # adjust_hyperparams(
 #     logger,
 #     params,
-#     sample_number=20,
-#     model_name="SeparatedLSTM",
+#     sample_number=5,
+#     model_name="BiLSTMWithAttention",
 #     run_model=text_scorer,
 #     test_params=test_params,
 #     embed_type="local",
 #     force_embed=False,
-#     use_cls=False,
-#     neighbor=1,
-#     only_center=True,
-#     max_len=100,
-#     test_mode=test_mode
+#     use_cls=True,
+#     test_mode=test_mode,
+#     tag_col=tag_name,
+#     embed_file=os.path.join(config.data_folder, "vector_embed_Separated_LSTM_mean_like_cls.npy")
 # )
+
+def run_seprated_lstm_with_neighbors():
+    # with more texts
+    test_params = {
+        "hidden_length": [256, 512],
+        "layer_number": [2, 3],
+        "linear_hidden_length": [256, 128],
+        "drop_out_rate": [0.5],
+        "batch_size": [400, 600, 800],
+        "learning_rate": 1e-4,
+        "training_size": 0.8,
+        "number_epochs": 100,
+    }
+
+
+    logger = init_logger(
+        log_level=logging.INFO,
+        name="Separated_LSTM_mean_like_neighbors_center",
+        write_to_file=True,
+        clean_up=False,
+    )
+    adjust_hyperparams(
+        logger,
+        params,
+        sample_number=1,
+        model_name="SeparatedLSTM",
+        run_model=text_scorer,
+        test_params=test_params,
+        embed_type="local",
+        force_embed=False,
+        use_cls=False,
+        neighbor=1,
+        only_center=True,
+        max_len=100,
+        test_mode=test_mode,
+        tag_col=tag_name,
+    )
+    adjust_hyperparams(
+        logger,
+        params,
+        sample_number=5,
+        model_name="SeparatedLSTM",
+        run_model=text_scorer,
+        test_params=test_params,
+        embed_type="local",
+        force_embed=False,
+        use_cls=False,
+        neighbor=1,
+        only_center=True,
+        max_len=100,
+        test_mode=test_mode,
+        tag_col=tag_name,
+    )
 
 
 # bertcnn/mlp
@@ -339,40 +343,40 @@ video_params = {
     "number_epochs": 100,
     "random": 1,
 }
-logger = init_logger(
-        logging.INFO, name="Video_LSTM_embed_mean_like", write_to_file=True, clean_up=False
-    )
-
-adjust_hyperparams(
-    logger, params, 5, "VideoNetEmbed", video_scorer, test_params=video_params, extract_frames=True, tag_col=tag_name
-)
+# logger = init_logger(
+#         logging.INFO, name="Video_LSTM_embed_mean_like", write_to_file=True, clean_up=False
+#     )
+#
+# adjust_hyperparams(
+#     logger, params, 5, "VideoNetEmbed", video_scorer, test_params=video_params, extract_frames=True, tag_col=tag_name
+# )
 
 # Joint Net
-# test_params = {
-#                 "text_hidden_length": [256, 512],
-#                 "text_layer_number": [1, 2, 3],
-#                 "text_linear_hidden_length": [128, 256],
-#                 "text_drop_out_rate": [0.6],
-#                 # "text_batch_size": [400, 600, 800],
-#                 # "text_learning_rate": 1e-4,
-#                 # "text_training_size": 0.8,
-#                 # "text_number_epochs": 100,
-#                 "video_frame_rate": 1,
-#                 "video_input_length": 512,
-#                 "video_pic_linear_hidden_length": 1024,
-#                 "video_pic_grad_layer_name": "aaa_blocks.31",
-#                 # "video_pic_drop_out_rate": [0.5, 0.3, 0.6],
-#                 "video_pic_channels": 3,
-#                 "video_layer_number": [1, 2, 3],
-#                 "video_hidden_length": [128, 256],
-#                 "video_linear_hidden_length": 128,
-#                 "video_drop_out_rate": [0.6],
-#                 "batch_size": [200, 400, 600],
-#                 "learning_rate": [1e-4, 1e-5],
-#                 "training_size": 0.8,
-#                 "number_epochs": 100,
-#                 "random": [0, 1],
-#             }
+test_params = {
+                "text_hidden_length": [512, 256],
+                "text_layer_number": [2, 3],
+                "text_linear_hidden_length": [128, 256],
+                "text_drop_out_rate": [0.6],
+                # "text_batch_size": [400, 600, 800],
+                # "text_learning_rate": 1e-4,
+                # "text_training_size": 0.8,
+                # "text_number_epochs": 100,
+                "video_frame_rate": 1,
+                "video_input_length": 512,
+                "video_pic_linear_hidden_length": 1024,
+                "video_pic_grad_layer_name": "aaa_blocks.31",
+                # "video_pic_drop_out_rate": [0.5, 0.3, 0.6],
+                "video_pic_channels": 3,
+                "video_layer_number": [1, 2, 3],
+                "video_hidden_length": [512],
+                "video_linear_hidden_length": [128, 256],
+                "video_drop_out_rate": [0.6],
+                "batch_size": [200, 400, 600],
+                "learning_rate": [1e-4, 1e-5],
+                "training_size": 0.8,
+                "number_epochs": 100,
+                "random": [0, 1],
+            }
 # logger = init_logger(
 #     log_level=logging.INFO,
 #     name="Separated_LSTM_with_cls&Video_Embed_mean_like",
@@ -392,3 +396,39 @@ adjust_hyperparams(
 #     tag_col=tag_name,
 #     text_embed_file=os.path.join(config.data_folder, "vector_embed_Separated_LSTM_mean_like_cls.npy")
 # )
+
+def run_video_attention():
+    test_params = {
+                "linear_length": 512,
+                "linear_hidden_length": 128,
+                "frames_per_clip": 16,
+                "grad_layer_name": "aaa_blocks.31",
+                "img_size": 180,
+                "drop_out_rate": 0.5,
+                "batch_size": 400,
+                "learning_rate": 1e-5,
+                "training_size": 0.8,
+                "number_epochs": 100,
+                "random": 1,
+            }
+    logger = init_logger(
+        log_level=logging.INFO,
+        name="STAM",
+        write_to_file=True,
+        clean_up=False,
+    )
+    adjust_hyperparams(
+        logger,
+        params,
+        sample_number=10,
+        test_params=test_params,
+        model_name="VideoAttention",
+        run_model=video_scorer,
+        embed_type="local",
+        test_mode=test_mode,
+        tag_col=tag_name,
+        extract_frames=True
+    )
+
+if __name__ == "__main__":
+    run_video_attention()

@@ -22,8 +22,10 @@ raw_data_file = os.path.join(data_folder, "data.csv")
 grouped_data_file = os.path.join(data_folder, "grouped.npy")
 embed_data_file = os.path.join(data_folder, "vector_embed")
 img_embed_folder = os.path.join(data_folder, "img_embeds")
+stam_path = os.path.join(this_folder, "Models", "STAM", "stam_16.pth")
 # frame_data_folder = os.path.join(this_folder, "Data", "frames")
-frame_data_folder = r"E:\frames"
+# frame_data_folder = r"E:\frames"
+frame_data_folder = r"E:\newframes"
 video_frame_rate = 5
 
 
@@ -198,6 +200,6 @@ advids = [
     "1216",
     "1104",
 ]
-# extra_feat_length = len(advids) + 7
-extra_feat_length = 7
+extra_feat_length = len(advids) + 7
+# extra_feat_length = 7
 img_batch_size = 1000

@@ -19,7 +19,7 @@ import json
 import datetime
 from utils import *
 from multiprocessing import Process, Array, Value, Lock
-
+import cv2
 import os
 
 import scenedetect
@@ -542,9 +542,6 @@ class DataHandler:
         # return scene_list
 
 
-
-
-
 def worker(data, data_len, indexes, group_ids, group_number, process_id, lock):
     for num, i in enumerate(indexes):
         if num % 100 == 0:
@@ -566,14 +563,15 @@ def worker(data, data_len, indexes, group_ids, group_number, process_id, lock):
                 group_ids[j] = group_number.value
             lock.release()
 
+
 if __name__ == "__main__":
     # data_handler = DataHandler(config.raw_data_file)
     data_handler = DataHandler(config.raw_data_file, log_level=logging.INFO)
 
-    data_handler.wash_data()
+    # data_handler.wash_data()
     # 214 short 835 english
 
-    data_handler.store_data()
+    # data_handler.store_data()
 
     # data_handler.seperate_text()
 
@@ -595,13 +593,13 @@ if __name__ == "__main__":
 
     # data_handler.display_tags()
 
-    # data_handler.seperate_text()
+    data_handler.seperate_text()
     #
     # tag_names = ["cost", "like", "bclk", "negative", "clk", "play3s", "like_clk", "bclk_clk", "cost_clk", "negative_clk",
     #              "like_play3s", "bclk_play3s", "cost_play3s", "negative_play3s", "play3s_clk"]
     #
     # for tag in tag_names:
-    #     data_handler.gen_tag_new(tag.split("_"), threshold=100)
+    data_handler.gen_tag_new(["like"], threshold=100)
     # #
     # data_handler.store_data()
 

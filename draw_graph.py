@@ -68,7 +68,11 @@ class DataShower(DataHandler):
                 tags.append(tag)
             tag = np.array(np.array(tags) == 0, dtype=int)
         else:
-            pred = np.array(pred)[:, -1]
+            try:
+                pred = np.array(pred)[:, -1]
+            except IndexError as err:
+                print(err)
+                pred = np.array(pred)
             tag = np.array(np.array(tag) == np.max(tag), dtype=int)
 
         fpr, tpr, thresholds = roc_curve(tag, pred, pos_label=1)
@@ -83,16 +87,20 @@ class DataShower(DataHandler):
         plt.xlabel('False Positive Rate')
         plt.show()
 
-    def draw_histogram(self, data, title, xlabel, ylabel, binnum=15, color="deepskyblue"):
+    def draw_histogram(self, data, title, xlabel, ylabel, binnum=15, color="deepskyblue", show_labels=True):
         data = np.array(data)
         fig_save_path = os.path.join(config.graph_folder, title + '.png')
         self.logger.info(f"{title}: mean {np.mean(data)}, max {np.max(data)}, min {np.min(data)}, std {np.std(data)}")
         # plt.title(f"title")
         plt.figure(figsize=(25, 15), dpi=100)
-        plt.ylabel(ylabel, fontsize=18)  # 设置x轴，并设定字号大小
-        plt.xlabel(xlabel, fontsize=18)  # 设置y轴，并设定字号大小
-        plt.yticks(fontsize=14)
-        plt.xticks(fontsize=14)
+        if show_labels:
+            plt.ylabel(ylabel, fontsize=18)  # 设置x轴，并设定字号大小
+            plt.xlabel(xlabel, fontsize=18)  # 设置y轴，并设定字号大小
+            plt.yticks(fontsize=14)
+            plt.xticks(fontsize=14)
+        else:
+            plt.yticks(fontsize=18)
+            plt.xticks(fontsize=18)
         res = plt.hist(x=np.array(data), bins=binnum, color=color, rwidth=0.8)
         # for i in res:
         #     bin_height = i.get_height()
@@ -125,6 +133,32 @@ class DataShower(DataHandler):
         # plt.barh(range(len(x)), y[0], height=1, color="orange",
         #              label=labels[0])
         plt.legend(loc="best", fontsize=18)
+        plt.savefig(fig_save_path)
+        plt.show()
+        plt.clf()
+
+    def draw_lines(self, y, title, labels, colors=None):
+        if colors is None:
+            colors = self.colors
+        fig_save_path = os.path.join(config.graph_folder, title + '.png')
+        if not isinstance(y[0], list):
+            y = [y]
+        plt.figure(figsize=(20, 15), dpi=120)
+        # plt.title(title, fontsize=24, color="orangered")
+        plt.xlabel('Epoch Number', fontsize=20)  # 设置y轴，并设定字号大小
+        x = range(len(y[0]))
+        plt.xticks(x, np.arange(len(y[0])), fontsize=18)
+        plt.yticks(fontsize=18)
+        plt.ylim(bottom=0.15, top=0.85)
+        for i, line in enumerate(y):
+            if "loss" in labels[i]:
+                style = '--'
+            else:
+                style = '-'
+            plt.plot(x, line, color=colors[i], linewidth=2, linestyle=style, label=labels[i])
+        # plt.barh(range(len(x)), y[0], height=1, color="orange",
+        #              label=labels[0])
+        plt.legend(loc="lower right", fontsize=22)
         plt.savefig(fig_save_path)
         plt.show()
         plt.clf()
@@ -176,6 +210,78 @@ class ModelResults:
         f1, id, pred, tag = load_model(model_file, model=None, info=True)
         print(f1)
         return f1, id, pred, tag
+
+    def get_all(self):
+        with open(self.log_file, "r") as f:
+            lines = f.readlines()
+
+        samples = []
+        sample_lines = []
+        for line in lines:
+            line = line.strip("\n")
+            if "Best Micro-F1" in line:
+                sta = line.index("Best Micro-F1: ") + len("Best Micro-F1: ")
+                end = line.index(", epoch")
+                f1 = float(line[sta:end])
+            if "Running sample" in line and len(sample_lines) > 0:
+                samples.append(sample_lines)
+                sample_lines = []
+            sample_lines.append(line)
+        if len(sample_lines) > 0:
+            samples.append(sample_lines)
+
+        epochs_data = []
+        for sample in samples:
+            epoch_data = {}
+            train_f1s = []
+            # 标记位置
+            train_f1_ind = -1
+            train_losses = []
+            train_loss_ind = -1
+            test_f1s = []
+            test_f1_ind = -1
+            test_losses = []
+            test_loss_ind = -1
+            for i, line in enumerate(sample):
+                line = line.strip("\n")
+                if "Running sample" in line:
+                    after_which = "with parameters: "
+                    start_index = line.index(after_which) + len(after_which)
+                    json_str = line[start_index:].replace("'", '"')
+                    params = json.loads(json_str)
+                    epoch_data["params"] = params
+                if "Training set" in line:
+                    train_f1_ind = i + 4
+                    train_loss_ind = i + 1
+                if "Testing set" in line:
+                    test_f1_ind = i + 4
+                    test_loss_ind = i + 1
+                if i == train_loss_ind:
+                    start_index = line.index("Loss: ") + len("Loss: ")
+                    train_losses.append(float(line[start_index:]))
+                if i == test_loss_ind:
+                    start_index = line.index("Loss: ") + len("Loss: ")
+                    test_losses.append(float(line[start_index:]))
+                if i == train_f1_ind:
+                    pattern = r"[[](.*?)[]]"
+                    f1s = list(
+                        filter(lambda x: x != "", re.findall(pattern, line)[0].split(" "))
+                    )
+                    f1s = np.array(f1s, dtype=float)
+                    train_f1s.append(f1s.mean())
+                if i == test_f1_ind:
+                    pattern = r"[[](.*?)[]]"
+                    f1s = list(
+                        filter(lambda x: x != "", re.findall(pattern, line)[0].split(" "))
+                    )
+                    f1s = np.array(f1s, dtype=float)
+                    test_f1s.append(f1s.mean())
+            epoch_data["train_f1"] = train_f1s
+            epoch_data["test_f1"] = test_f1s
+            epoch_data["train_loss"] = train_losses
+            epoch_data["test_loss"] = test_losses
+            epochs_data.append(epoch_data)
+        return epochs_data
 
     # 加载文件，并选出f1最好的一次测试
     def get_best_test(self):
@@ -266,11 +372,11 @@ def show_basic_status():
         sep_num.append(len(i))
         sentence_len.append(sum([len(x) for x in i]))
     # graph_drawer.draw_histogram(duration, "Duration", "Duration/(s)", "Sum")
-    graph_drawer.draw_histogram(sentence_len, "SentenceLength", "Sentence Length/(word)", "Sum", color=graph_drawer.colors[-1])
+    # graph_drawer.draw_histogram(sentence_len, "SentenceLength", "Sentence Length/(word)", "Sum", color=graph_drawer.colors[-1])
     graph_drawer.draw_histogram(sep_num, "SeparateNumber", "Separate Number", "Sum",
-                                color=graph_drawer.colors[-2])
+                                color=graph_drawer.colors[-3], show_labels=False)
     graph_drawer.draw_histogram(seped_len, "SeparateLength", "Separate Length/(word)", "Sum",
-                                color=graph_drawer.colors[-3])
+                                color=graph_drawer.colors[-4], show_labels=False)
 
 # key不正确，暂时搁置
 def check_3_bin_res():
@@ -305,11 +411,12 @@ def show_relations():
 
 def show_tag_relations():
     col1 = "mean_tag_like"
-    col2 = "mean_tag_clk"
+    col2 = "mean_tag_cost"
     col3 = "mean_tag_negative"
     graph_drawer = DataShower(config.raw_data_file, logging.INFO)
     d1, d2, d3 = graph_drawer.data[col1], graph_drawer.data[col2], graph_drawer.data[col3]
     # d3 = 1 - d3
+    print(np.sum(d1==d2) / graph_drawer.data_len)
     print(np.sum(((d1==d2) & (d2==d3)) / graph_drawer.data_len))
 
 
@@ -342,20 +449,42 @@ def tags_f1s():
         advid_f1s.append(graph_drawer.get_advid_f1(tag))
     graph_drawer.draw_bars(tags, [f1s_mean, f1s, advid_f1s], title="F1 for different tags", labels=["normalized", "original", "advid"], total_width=0.9)
 
+def show_loss_f1_lines():
+    graph_drawer = DataShower(config.raw_data_file, logging.INFO)
+    log_name = "Separated_LSTM_mean_like_cls"
+    results = ModelResults(log_name, logging.INFO)
+    res = results.get_best_test()
+    res = results.get_all()[-1]
+    lines = [res["train_loss"], res["test_loss"], res["train_f1"], res["test_f1"]]
+    graph_drawer.draw_lines(lines, title="Train-Status-smallbatch", labels=["train loss", "test loss", "train micro-f1", "test micro-f1"], colors=["royalblue", "firebrick", "aqua", "tomato"])
+
 def show_model_result():
     logs = os.listdir(config.log_dir)
     logs = [log for log in logs if "mean_like" in log]
     graph_drawer = DataShower(config.raw_data_file, logging.INFO)
+    logs_needed = []
+    # results = ModelResults(log_name, logging.INFO)
+
+    # for test_res in results.get_all():
+    #     print(test_res["params"])
+    #     print(np.max(test_res["test_f1"]))
+    # log_name = "Separated_LSTM_with_upload_time&Video_Embed"
+    # parse_a_log(log_name, graph_drawer)
+    # log_name = "mean_tag_cost_test_Separated_LSTM_without_advid"
+    # parse_a_log(log_name, graph_drawer)
     for log in logs:
         pat = "log_(.*?).txt"
         log_name = re.findall(pat, log)[0]
-        print(log_name)
-        results = ModelResults(log_name, logging.INFO)
-        F1, ids, pred, tag = results.get_model_result()
-        graph_drawer.cal_auc(pred, tag, False, ids)
-        print(results.get_best_test())
+        if len(logs_needed) == 0 or log_name in logs_needed:
+            print(log_name)
+            parse_a_log(log_name, graph_drawer)
 
 
+def parse_a_log(log_name, graph_drawer):
+    results = ModelResults(log_name, logging.INFO)
+    F1, ids, pred, tag = results.get_model_result()
+    graph_drawer.cal_auc(pred, tag, False, ids)
+    print(results.get_best_test())
 
 if __name__ == "__main__":
     # repeat_videos()
@@ -367,6 +496,7 @@ if __name__ == "__main__":
     # show_relations()
     # show_basic_status()
     show_model_result()
+    # show_loss_f1_lines()
     # for model in os.listdir(config.model_save_path):
     #     if model.endswith('.pth'):
     #         log_parser = ModelResults(model.split('.')[0], log_level=logging.INFO)

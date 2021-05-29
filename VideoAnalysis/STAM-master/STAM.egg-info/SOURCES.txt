@@ -1,0 +1,8 @@
+README.md
+setup.py
+STAM.egg-info/PKG-INFO
+STAM.egg-info/SOURCES.txt
+STAM.egg-info/dependency_links.txt
+STAM.egg-info/not-zip-safe
+STAM.egg-info/requires.txt
+STAM.egg-info/top_level.txt
