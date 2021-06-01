@@ -57,21 +57,25 @@ def extract_frame_worker(video_files, too_short, process_id, kwargs):
             )
             frame = np.transpose(frame, (2, 0, 1))
             if len(frames) > 0:
-                diffs.append(rgb_mean_dif(frame, frames[-1]))
+                # tuple 排序，避免重复
+                diffs.append((rgb_mean_dif(frame, frames[-1]), frame_count))
             frames.append(frame)
 
             # self.logger.debug(frame.shape)
             frame_count += 1
         if frame_count <= target_framenum:
-            frames = [frames[0]] * (target_framenum - frame_count) + frames
+            frames = [frames[0] for _ in range(target_framenum - frame_count)] + frames
             if frame_count < target_framenum:
                 too_short.value += 1
         else:
             threshold = list(sorted(diffs, reverse=True))[target_framenum - 1]
             frames = [frames[i] for i in range(frame_count) if i == 0 or diffs[i - 1] > threshold]
         frames = np.array(frames)
-        filename = f"{id}.npy"
-        np.save(os.path.join(target_file_folder, filename), frames)
+        if frames.shape[0] == target_framenum:
+            filename = f"{id}.npy"
+            np.save(os.path.join(target_file_folder, filename), frames)
+        else:
+            print(frames.shape[0], id)
         vc.release()
 
 class VideoScorer:
@@ -89,6 +93,30 @@ class VideoScorer:
         self.tag = torch.tensor(tag_data)
         self.data_len = self.tag.shape[0]
         self.logger.info("Data length: %d" % self.data_len)
+
+    def vit_embed(self, frames_folder, embed_folder, batch_size=80):
+        frames_files = os.listdir(frames_folder)
+        already_embeded = os.listdir(embed_folder)
+        frames_files = [file for file in frames_files if file not in already_embeded]
+        video_num = len(frames_files)
+        n_batch = math.ceil(video_num / batch_size)
+        for i in range(n_batch):
+            if i % 100 == 0:
+                self.logger.info("Doing embeding for vit, at %d/%d" % (i, n_batch))
+            sta = i * batch_size
+            end = sta + batch_size
+            data = []
+            ids = []
+            for frame_file in frames_files[sta:end]:
+                frame_data = np.load(os.path.join(frames_folder, frame_file))
+                ids.append(frame_file.split('.')[0])
+                frame_data = torch.from_numpy(frame_data).to(dtype=torch.float32, device=self.device)
+                data.append(frame_data)
+            data = torch.cat(data, dim=0)
+            features = self.model.extract_embed(data)
+            for id, feature in zip(ids, features):
+                file_path = os.path.join(embed_folder, f"{id}.npy")
+                np.save(file_path, feature)
 
     # For stam, extract frames at fixed number
     def extract_frames_fixed_number(self, ids, video_folder, target_file_folder, force=False):
@@ -123,7 +151,7 @@ class VideoScorer:
         except KeyError:
             target_framenum = self.model.hyperparams["video"]["frames_per_clip"]
             img_size = self.model.hyperparams["video"]["img_size"]
-        process_number = 8
+        process_number = 1
         process_pool = []
         too_short = Value('i', 0)
         kwargs = {
@@ -243,7 +271,10 @@ class VideoScorer:
             frames = np.array(frames)
             vc.release()
         else:
-            frames = np.load(os.path.join(config.frame_data_folder, file_name))
+            if self.model.requires_embed:
+                frames = np.load(os.path.join(config.embed_data_folder, file_name))
+            else:
+                frames = np.load(os.path.join(config.frame_data_folder, file_name))
         return frames
 
     def run_model(self, mode="train", **kwargs):
@@ -253,7 +284,7 @@ class VideoScorer:
             self.run_video_net_with_embed(mode, kwargs)
         if self.model.name == "JointNet":
             self.run_video_text_net(mode, kwargs)
-        if self.model.name == "VideoAttention":
+        if self.model.name == "VideoAttention" or self.model.name == "VideoAttentionEmbed":
             self.run_stam(mode, kwargs)
 
     def run_stam(self, mode, kwargs):
@@ -387,34 +418,54 @@ class VideoScorer:
             pass
 
     # video_input_folder包含所有video的numpy数组，使用id来确定顺序
-    def image_embedding(self, video_input_folder):
+    def image_embedding(self, video_input_folder=None, frames_folder=None):
         self.logger.info("Embedding videos")
-        ec_model = EfficientNet.from_name("efficientnet-b4")
-        net_weight = torch.load(
-            os.path.join(config.efficient_path, "efficientnet-b4-6ed6700e.pth")
-        )
-        video_files = os.listdir(video_input_folder)
-        ec_model.load_state_dict(net_weight)
-        ec_model.to(self.device)
-        ec_model.eval()
-        frames_data = {}
-        if not os.path.exists(config.img_embed_folder):
-            os.makedirs(config.img_embed_folder)
-        for i, video_file in enumerate(video_files):
-            if i % 100 == 0:
-                self.logger.info('Process: %d/%d' % (i, len(video_files)))
-            if i > 0 and i % 100 == 0:
-                np.savez(os.path.join(config.img_embed_folder, f"{i}.npz"), frames_data)
-                frames_data = {}
-            id = video_file.split('.')[0]
-            video_file_path = os.path.join(video_input_folder, video_file)
-            frames = self.load_video_data(video_file_path,  frame_rate=config.video_frame_rate, target_rate=self.model.hyperparams["frame_rate"])
-            frames_tensor = torch.from_numpy(frames).to(device=self.device, dtype=torch.float32)
-            with torch.no_grad():
-                frame_embeds = ec_model._avg_pooling(ec_model.extract_features(frames_tensor)).flatten(start_dim=1)
-                # print(frame_embeds.shape)
-            frames_data[id] = frame_embeds.cpu().numpy()
-        return frames_data
+        if frames_folder is None:
+            ec_model = EfficientNet.from_name("efficientnet-b4")
+            net_weight = torch.load(
+                os.path.join(config.efficient_path, "efficientnet-b4-6ed6700e.pth")
+            )
+            video_files = os.listdir(video_input_folder)
+            ec_model.load_state_dict(net_weight)
+            ec_model.to(self.device)
+            ec_model.eval()
+            frames_data = {}
+            if not os.path.exists(config.img_embed_folder):
+                os.makedirs(config.img_embed_folder)
+            for i, video_file in enumerate(video_files):
+                if i % 100 == 0:
+                    self.logger.info('Process: %d/%d' % (i, len(video_files)))
+                if i > 0 and i % 100 == 0:
+                    np.savez(os.path.join(config.img_embed_folder, f"{i}.npz"), frames_data)
+                    frames_data = {}
+                id = video_file.split('.')[0]
+                video_file_path = os.path.join(video_input_folder, video_file)
+                frames = self.load_video_data(video_file_path,  frame_rate=config.video_frame_rate, target_rate=self.model.hyperparams["frame_rate"])
+                frames_tensor = torch.from_numpy(frames).to(device=self.device, dtype=torch.float32)
+                with torch.no_grad():
+                    frame_embeds = ec_model._avg_pooling(ec_model.extract_features(frames_tensor)).flatten(start_dim=1)
+                    # print(frame_embeds.shape)
+                frames_data[id] = frame_embeds.cpu().numpy()
+                return frames_data
+        else:
+            embed_folder = config.embed_data_folder
+            if not os.path.exists(embed_folder):
+                os.makedirs(embed_folder)
+            frames_files = os.listdir(frames_folder)
+            already_embeded = os.listdir(embed_folder)
+            frames_files = [file for file in frames_files if file not in already_embeded]
+            video_num = len(frames_files)
+            for i in range(video_num):
+                if i % 100 == 0:
+                    self.logger.info("Doing embeding for efficientnet, at %d/%d" % (i, video_num))
+                frame_file = frames_files[i]
+                frame_data = np.load(os.path.join(frames_folder, frame_file))
+                id = frame_file.split('.')[0]
+                frame_data = torch.from_numpy(frame_data).to(dtype=torch.float32, device=self.device)
+                feature = self.model.extract_embed(frame_data)
+                file_path = os.path.join(embed_folder, f"{id}.npy")
+                np.save(file_path, feature)
+
 
     def run_video_net_with_embed(self, mode, kwargs):
         batch_size = kwargs["params"]["batch_size"]
@@ -429,6 +480,8 @@ class VideoScorer:
             extra = []
             for data_section_id in indexes:
                 data_section = frame_data[data_section_id]
+                if isinstance(data_section, str):
+                    data_section = self.load_video_data(data_section)
                 extra_feat = extra_data[data_section_id]
                 extra.append(extra_feat)
                 input.append(torch.tensor(data_section, device=self.device, dtype=torch.float32))
@@ -436,6 +489,7 @@ class VideoScorer:
             _tag_data = tag_data[indexes].to(self.device)
             _extra_data = torch.tensor(extra, dtype=torch.float32).to(self.device)
             if not requires_grad:
+                self.model.eval()
                 with torch.no_grad():
                     pred, loss = self.model(
                         input,
@@ -443,6 +497,7 @@ class VideoScorer:
                         tag=_tag_data
                     )
             else:
+                self.model.train()
                 pred, loss = self.model(
                     input,
                     _extra_data,
@@ -567,7 +622,7 @@ class VideoScorer:
                 extra_feat = extra_data[data_section_id]
                 extra.append(extra_feat)
                 text_input.append(torch.tensor(text_data_section, dtype=torch.float32))
-                frame_input.append(torch.tensor(frame_data_section, device=self.device, dtype=torch.float32))
+                frame_input.append(torch.tensor(self.load_video_data(frame_data_section), device=self.device, dtype=torch.float32))
                 lengths.append(len(text_data_section))
             input_padded = rnn.pad_sequence(text_input, batch_first=True)
             self.logger.debug("padded {}".format(input_padded))
@@ -825,32 +880,63 @@ def main(model, logger, kwargs):
     run_params = model.hyperparams["common"]
     print(run_params)
     if model.requires_embed:
-        try:
-            embed = {}
-            get_memory_status("init")
-            for embed_file in os.listdir(config.img_embed_folder):
-                embed_file_path = os.path.join(config.img_embed_folder, embed_file)
-                _embed = np.load(embed_file_path, allow_pickle=True)['arr_0'][()]
-                for key in _embed:
-                    # 减半
-                    embed[key] = _embed[key][::4, :]
-                del _embed
-                gc.collect()
-            get_memory_status("video_embed")
-            print(len(embed))
-        except:
-            embed = video_scorer.image_embedding(config.video_folder)
-        frame_data = []
-        removed_rows = []
-        for i, row in data.iterrows():
-            if str(row["id"]) in embed.keys():
-                frame_data.append(embed[str(row["id"])])
-            else:
-                removed_rows.append(i)
-        get_memory_status(617)
-        del embed
-        gc.collect()
-        get_memory_status(619)
+        # Efficient Net embedding
+        if "VideoAttention" not in model.name:
+            video_scorer.image_embedding(frames_folder=config.frame_data_folder)
+            video_files = os.listdir(config.embed_data_folder)
+            removed_rows = []
+            frame_data = []
+            frame_data_dict = {}
+            for video_file in video_files:
+                id = video_file.split(".")[0]
+                frame_data_dict[id] = video_file
+            for i, row in data.iterrows():
+                if str(row["id"]) in frame_data_dict.keys():
+                    frame_data.append(frame_data_dict[str(row["id"])])
+                else:
+                    removed_rows.append(i)
+            # try:
+            #     embed = {}
+            #     get_memory_status("init")
+            #     for embed_file in os.listdir(config.img_embed_folder):
+            #         embed_file_path = os.path.join(config.img_embed_folder, embed_file)
+            #         _embed = np.load(embed_file_path, allow_pickle=True)['arr_0'][()]
+            #         for key in _embed:
+            #             # 减半
+            #             embed[key] = _embed[key][::4, :]
+            #         del _embed
+            #         gc.collect()
+            #     get_memory_status("video_embed")
+            #     print(len(embed))
+            # except:
+            #     embed = video_scorer.image_embedding(config.video_folder)
+            # frame_data = []
+            # removed_rows = []
+            # for i, row in data.iterrows():
+            #     if str(row["id"]) in embed.keys():
+            #         frame_data.append(embed[str(row["id"])])
+            #     else:
+            #         removed_rows.append(i)
+            # get_memory_status(617)
+            # del embed
+            # gc.collect()
+            # get_memory_status(619)
+        else:
+            video_scorer.extract_frames_fixed_number(data["id"], config.video_folder, config.frame_data_folder,
+                                                     kwargs.get("force", False))
+            video_scorer.vit_embed(config.frame_data_folder, config.embed_data_folder)
+            video_files = os.listdir(config.embed_data_folder)
+            removed_rows = []
+            frame_data = []
+            frame_data_dict = {}
+            for video_file in video_files:
+                id = video_file.split(".")[0]
+                frame_data_dict[id] = video_file
+            for i, row in data.iterrows():
+                if str(row["id"]) in frame_data_dict.keys():
+                    frame_data.append(frame_data_dict[str(row["id"])])
+                else:
+                    removed_rows.append(i)
     else:
         extract_frames = kwargs.get("extract_frames", True)
         if extract_frames:

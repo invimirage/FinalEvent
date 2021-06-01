@@ -12,177 +12,194 @@ import config
 import subprocess
 import os
 import time
-from utils import *
+# from utils import *
 import cv2
-from models import *
+# from models import *
 
-# a = {1:2}
-a = 1
+model = torch.load(os.path.join(config.stam_path))["model"]
+for key in model:
+    print(key)
+# files = os.listdir(config.frame_data_folder)
+# c = 0
+# for f in files:
+#     fp = os.path.join(config.frame_data_folder, f)
+#     arr = np.load(fp)
+#     if arr.shape[0] != 16:
+#         os.remove(fp)
+#         c += 1
+# print(c)
+# # a = {1:2}
+# a = (1, 2)
+# b = (1, 3)
+# c = (2, 1)
+# l = [c, b, a]
+# l = sorted(l)
+# print(l)
 # 构造函数为每一个帧生产一个这个类，主要信息是self.histogram
-class HSVFeature:
-    def __init__(self, image):
-        self.shape = image.shape
-        if self.shape[2] == 4:
-            image = image[:, :, 0:3]
-            self.shape = image.shape
-        HSV = np.zeros(self.shape)
-        for i in range(self.shape[0]):
-            for j in range(self.shape[1]):
-                HSV[i][j] = self.rgb2hsv(image[i][j])
-        # generate feature, 4*178 dimensions for each image
-        self.histogram = self.map_histogram(HSV)
-
-    def rgb2hsv(self, rgb):
-        r, g, b = rgb
-        # print(r, g, b)
-        r, g, b = r, g, b
-        mx = max(r, g, b)
-        mn = min(r, g, b)
-        m = mx-mn
-        if mx == mn:
-            h = 0
-        elif mx == r:
-            if g >= b:
-                h = ((g-b)/m)*60
-            else:
-                h = ((g-b)/m)*60 + 360
-        elif mx == g:
-            h = ((b-r)/m)*60 + 120
-        elif mx == b:
-            h = ((r-g)/m)*60 + 240
-        if mx == 0:
-            s = 0
-        else:
-            s = m/mx
-        v = mx
-        return h, s, v
-
-    def map_histogram(self, HSV):
-        midlen = self.shape[0]//2 + 1
-        midwid = self.shape[1]//2 + 1
-        histograms = np.zeros([4, 178])
-        counts = np.zeros(4)
-        for i in range(self.shape[0]):
-            for j in range(self.shape[1]):
-                histograms[int(i//midlen*2+j//midwid)][self.judge_section(HSV[i][j])] += 1
-                counts[int(i//midlen*2+j//midwid)] += 1
-        for i in range(4):
-            if counts[i] != 0:
-                histograms[i] = histograms[i] / counts[i]
-        return histograms
-
-    def judge_section(self, hsv):
-        h, s, v = hsv
-        hsec = h//20
-        if hsec == 18:
-            hsec -= 1
-        ssec = 1/3.5
-        if s <= 0.5 * ssec:
-            ssec = 0
-        else:
-            ssec = (s-0.5*ssec)//ssec + 1
-            if ssec == 4:
-                ssec -= 1
-        if ssec == 0:
-            vsec = (v*16)//1
-            if vsec == 16:
-                vsec -= 1
-        else:
-            vsec = (v*3)//1
-            if vsec == 3:
-                vsec -= 1
-        if ssec == 0:
-            sec = vsec
-        else:
-            sec = 16 + hsec + 18*vsec + 54*(ssec-1)
-        return int(sec)
-
-    # 计算两个图片（帧）之间的相似度，是比较两个HSVFeature类
-    def distance(self, img):
-        dist = 0
-        for i in range(4):
-            ahg = self.histogram[i]
-            bhg = img.histogram[i]
-            length = len(ahg)
-            if length != 178:
-                print('You met a bug! Haha')
-            # mark is used to show whether there is some dominent color, and what it is
-            mark = -1
-            dominent_shrehold = 0.5
-            diff_sum = 0
-            for j in range(178):
-                if ahg[j] > dominent_shrehold and bhg[j] > dominent_shrehold:
-                    mark = ahg[j] + bhg[j]
-                else:
-                    diff_sum += np.fabs(ahg[j] - bhg[j])
-            if mark != -1 and mark != 2:
-                diff_sum = diff_sum * 2 / (2 - mark)
-            dist += diff_sum
-        # 归一化
-        return 1-(dist/8)
-
-def rgb_mean_dif(img1, img2):
-    rgb1 = np.mean(img1, axis=(1, 2))
-    rgb2 = np.mean(img2, axis=(1, 2))
-    return np.sum(np.abs(rgb1-rgb2))
-
-def extract_frames_fixed_number():
-    # 加速查找
-    video_folder = config.video_folder
-    video_files = list(
-        filter(
-            lambda x: x.endswith(".mp4") and not x.endswith("_origin.mp4"),
-            os.listdir(video_folder),
-        )
-    )[0:50]
-    np.random.shuffle(video_files)
-    video_framerate = config.video_frame_rate
-    target_framenum = 16
-    img_size = 180
-    for i, video_file in enumerate(video_files):
-        id = video_file.split(".")[0]
-        frames = []
-        diffs = []
-        # hsvs = []
-        video_path = os.path.join(video_folder, video_file)
-        vc = cv2.VideoCapture(video_path)
-        total_frames = vc.get(cv2.CAP_PROP_FRAME_COUNT)
-        interval = total_frames // target_framenum
-        frame_count = 0
-        while True:
-            rval, frame = vc.read()
-            if not rval:
-                break
-            frame = cv2.resize(
-                frame, (img_size, img_size), interpolation=cv2.INTER_LANCZOS4
-            )
-            # hsv_feat = HSVFeature(frame)
-            frame = np.transpose(frame, (2, 0, 1))
-            if len(frames) > 0:
-                diffs.append(rgb_mean_dif(frame, frames[-1]))
-            frames.append(frame)
-            # hsvs.append(hsv_feat)
-            # self.logger.debug(frame.shape)
-            frame_count += 1
-        if frame_count < target_framenum:
-            frames = [frames[0]] * (target_framenum - frame_count) + frames
-        else:
-            threshold = list(sorted(diffs, reverse=True))[target_framenum - 1]
-            # print(diffs)
-            print(threshold)
-            frames = [frames[i] for i in range(frame_count) if i == 0 or diffs[i-1] > threshold]
-            for i, frame in enumerate(frames):
-                frame = frame.transpose((1, 2, 0))
-                cv2.imwrite(f'./test/{id}_{i}.png', frame)
-        frames = np.array(frames)
-        print(frames)
-        if frames.shape[0] == 0:
-            os.remove(video_path)
-        else:
-            filename = f"{id}.npy"
-        vc.release()
-extract_frames_fixed_number()
-b = 2
+# class HSVFeature:
+#     def __init__(self, image):
+#         self.shape = image.shape
+#         if self.shape[2] == 4:
+#             image = image[:, :, 0:3]
+#             self.shape = image.shape
+#         HSV = np.zeros(self.shape)
+#         for i in range(self.shape[0]):
+#             for j in range(self.shape[1]):
+#                 HSV[i][j] = self.rgb2hsv(image[i][j])
+#         # generate feature, 4*178 dimensions for each image
+#         self.histogram = self.map_histogram(HSV)
+#
+#     def rgb2hsv(self, rgb):
+#         r, g, b = rgb
+#         # print(r, g, b)
+#         r, g, b = r, g, b
+#         mx = max(r, g, b)
+#         mn = min(r, g, b)
+#         m = mx-mn
+#         if mx == mn:
+#             h = 0
+#         elif mx == r:
+#             if g >= b:
+#                 h = ((g-b)/m)*60
+#             else:
+#                 h = ((g-b)/m)*60 + 360
+#         elif mx == g:
+#             h = ((b-r)/m)*60 + 120
+#         elif mx == b:
+#             h = ((r-g)/m)*60 + 240
+#         if mx == 0:
+#             s = 0
+#         else:
+#             s = m/mx
+#         v = mx
+#         return h, s, v
+#
+#     def map_histogram(self, HSV):
+#         midlen = self.shape[0]//2 + 1
+#         midwid = self.shape[1]//2 + 1
+#         histograms = np.zeros([4, 178])
+#         counts = np.zeros(4)
+#         for i in range(self.shape[0]):
+#             for j in range(self.shape[1]):
+#                 histograms[int(i//midlen*2+j//midwid)][self.judge_section(HSV[i][j])] += 1
+#                 counts[int(i//midlen*2+j//midwid)] += 1
+#         for i in range(4):
+#             if counts[i] != 0:
+#                 histograms[i] = histograms[i] / counts[i]
+#         return histograms
+#
+#     def judge_section(self, hsv):
+#         h, s, v = hsv
+#         hsec = h//20
+#         if hsec == 18:
+#             hsec -= 1
+#         ssec = 1/3.5
+#         if s <= 0.5 * ssec:
+#             ssec = 0
+#         else:
+#             ssec = (s-0.5*ssec)//ssec + 1
+#             if ssec == 4:
+#                 ssec -= 1
+#         if ssec == 0:
+#             vsec = (v*16)//1
+#             if vsec == 16:
+#                 vsec -= 1
+#         else:
+#             vsec = (v*3)//1
+#             if vsec == 3:
+#                 vsec -= 1
+#         if ssec == 0:
+#             sec = vsec
+#         else:
+#             sec = 16 + hsec + 18*vsec + 54*(ssec-1)
+#         return int(sec)
+#
+#     # 计算两个图片（帧）之间的相似度，是比较两个HSVFeature类
+#     def distance(self, img):
+#         dist = 0
+#         for i in range(4):
+#             ahg = self.histogram[i]
+#             bhg = img.histogram[i]
+#             length = len(ahg)
+#             if length != 178:
+#                 print('You met a bug! Haha')
+#             # mark is used to show whether there is some dominent color, and what it is
+#             mark = -1
+#             dominent_shrehold = 0.5
+#             diff_sum = 0
+#             for j in range(178):
+#                 if ahg[j] > dominent_shrehold and bhg[j] > dominent_shrehold:
+#                     mark = ahg[j] + bhg[j]
+#                 else:
+#                     diff_sum += np.fabs(ahg[j] - bhg[j])
+#             if mark != -1 and mark != 2:
+#                 diff_sum = diff_sum * 2 / (2 - mark)
+#             dist += diff_sum
+#         # 归一化
+#         return 1-(dist/8)
+#
+# def rgb_mean_dif(img1, img2):
+#     rgb1 = np.mean(img1, axis=(1, 2))
+#     rgb2 = np.mean(img2, axis=(1, 2))
+#     return np.sum(np.abs(rgb1-rgb2))
+#
+# def extract_frames_fixed_number():
+#     # 加速查找
+#     video_folder = config.video_folder
+#     video_files = list(
+#         filter(
+#             lambda x: x.endswith(".mp4") and not x.endswith("_origin.mp4"),
+#             os.listdir(video_folder),
+#         )
+#     )[0:50]
+#     np.random.shuffle(video_files)
+#     video_framerate = config.video_frame_rate
+#     target_framenum = 16
+#     img_size = 180
+#     for i, video_file in enumerate(video_files):
+#         id = video_file.split(".")[0]
+#         frames = []
+#         diffs = []
+#         # hsvs = []
+#         video_path = os.path.join(video_folder, video_file)
+#         vc = cv2.VideoCapture(video_path)
+#         total_frames = vc.get(cv2.CAP_PROP_FRAME_COUNT)
+#         interval = total_frames // target_framenum
+#         frame_count = 0
+#         while True:
+#             rval, frame = vc.read()
+#             if not rval:
+#                 break
+#             frame = cv2.resize(
+#                 frame, (img_size, img_size), interpolation=cv2.INTER_LANCZOS4
+#             )
+#             # hsv_feat = HSVFeature(frame)
+#             frame = np.transpose(frame, (2, 0, 1))
+#             if len(frames) > 0:
+#                 diffs.append(rgb_mean_dif(frame, frames[-1]))
+#             frames.append(frame)
+#             # hsvs.append(hsv_feat)
+#             # self.logger.debug(frame.shape)
+#             frame_count += 1
+#         if frame_count < target_framenum:
+#             frames = [frames[0]] * (target_framenum - frame_count) + frames
+#         else:
+#             threshold = list(sorted(diffs, reverse=True))[target_framenum - 1]
+#             # print(diffs)
+#             print(threshold)
+#             frames = [frames[i] for i in range(frame_count) if i == 0 or diffs[i-1] > threshold]
+#             for i, frame in enumerate(frames):
+#                 frame = frame.transpose((1, 2, 0))
+#                 cv2.imwrite(f'./test/{id}_{i}.png', frame)
+#         frames = np.array(frames)
+#         print(frames)
+#         if frames.shape[0] == 0:
+#             os.remove(video_path)
+#         else:
+#             filename = f"{id}.npy"
+#         vc.release()
+# extract_frames_fixed_number()
+# b = 2
 # checkpoint = torch.load(os.path.join(config.model_save_path, "Separated_LSTM_mean_like_cls.pth"))
 # sd = checkpoint["model"]
 # for i in sd:

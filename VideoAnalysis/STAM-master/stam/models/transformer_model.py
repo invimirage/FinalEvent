@@ -68,6 +68,7 @@ class Attention(nn.Module):
     def forward(self, x):
         B, N, C = x.shape
         qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
+        # q, k, v | Batch size | head number | Patch Number | size for each head
         q, k, v = qkv[0], qkv[1], qkv[2]   # make torchscript happy (cannot use tensor as tuple)
 
         attn = (q @ k.transpose(-2, -1)) * self.scale
@@ -195,7 +196,7 @@ class VisionTransformer(nn.Module):
     def forward(self, x):
         x = self.forward_features(x)
         if self.aggregate:
-            x = self.aggregate(x)
+             x = self.aggregate(x)
         x = self.head(x)
         return x
 

@@ -325,78 +325,82 @@ mlp_params = {
 # )
 
 # videonet
-video_params = {
-    "frame_rate": 1,
-    # 用embed设为1792
-    "input_length": [1792],
-    "pic_linear_hidden_length": 1024,
-    "pic_grad_layer_name": "aaa_blocks.31",
-    "pic_drop_out_rate": [0.5, 0.3, 0.6],
-    "pic_channels": 3,
-    "layer_number": 3,
-    "hidden_length": 512,
-    "linear_hidden_length": 128,
-    "drop_out_rate": 0.5,
-    "batch_size": [200, 400, 600],
-    "learning_rate": [1e-3, 1e-4, 1e-5],
-    "training_size": 0.8,
-    "number_epochs": 100,
-    "random": 1,
-}
-# logger = init_logger(
-#         logging.INFO, name="Video_LSTM_embed_mean_like", write_to_file=True, clean_up=False
-#     )
-#
-# adjust_hyperparams(
-#     logger, params, 5, "VideoNetEmbed", video_scorer, test_params=video_params, extract_frames=True, tag_col=tag_name
-# )
+def run_video_net_with_embed():
+    config.embed_data_folder = r"E:\frames_embedding"
+    video_params = {
+        "frame_rate": 1,
+        # 用embed设为1792
+        "input_length": [768],
+        "pic_linear_hidden_length": 1024,
+        "pic_grad_layer_name": "aaa_blocks.31",
+        "pic_drop_out_rate": [0.5, 0.3, 0.6],
+        "pic_channels": 3,
+        "layer_number": 3,
+        "hidden_length": 512,
+        "linear_hidden_length": 128,
+        "drop_out_rate": 0.5,
+        "batch_size": [200, 400, 600],
+        "learning_rate": [1e-4, 1e-5],
+        "training_size": 0.8,
+        "number_epochs": 100,
+        "random": 1,
+    }
+    logger = init_logger(
+            logging.INFO, name="Video_LSTM_with_vit_embed_mean_like", write_to_file=True, clean_up=False
+        )
+
+    adjust_hyperparams(
+        logger, params, 5, "VideoNetEmbed", video_scorer, test_params=video_params, extract_frames=True, tag_col=tag_name
+    )
 
 # Joint Net
-test_params = {
-                "text_hidden_length": [512, 256],
-                "text_layer_number": [2, 3],
-                "text_linear_hidden_length": [128, 256],
-                "text_drop_out_rate": [0.6],
-                # "text_batch_size": [400, 600, 800],
-                # "text_learning_rate": 1e-4,
-                # "text_training_size": 0.8,
-                # "text_number_epochs": 100,
-                "video_frame_rate": 1,
-                "video_input_length": 512,
-                "video_pic_linear_hidden_length": 1024,
-                "video_pic_grad_layer_name": "aaa_blocks.31",
-                # "video_pic_drop_out_rate": [0.5, 0.3, 0.6],
-                "video_pic_channels": 3,
-                "video_layer_number": [1, 2, 3],
-                "video_hidden_length": [512],
-                "video_linear_hidden_length": [128, 256],
-                "video_drop_out_rate": [0.6],
-                "batch_size": [200, 400, 600],
-                "learning_rate": [1e-4, 1e-5],
-                "training_size": 0.8,
-                "number_epochs": 100,
-                "random": [0, 1],
-            }
-# logger = init_logger(
-#     log_level=logging.INFO,
-#     name="Separated_LSTM_with_cls&Video_Embed_mean_like",
-#     write_to_file=True,
-#     clean_up=False,
-# )
-# adjust_hyperparams(
-#     logger,
-#     params,
-#     sample_number=10,
-#     test_params=test_params,
-#     model_name="JointNet",
-#     run_model=video_scorer,
-#     embed_type="local",
-#     use_cls=False,
-#     test_mode=test_mode,
-#     tag_col=tag_name,
-#     text_embed_file=os.path.join(config.data_folder, "vector_embed_Separated_LSTM_mean_like_cls.npy")
-# )
-
+def run_joint_net():
+    # vit_embedding
+    config.embed_data_folder = r"E:\frames_embedding"
+    test_params = {
+                    "text_hidden_length": [512, 256],
+                    "text_layer_number": [2, 3],
+                    "text_linear_hidden_length": [128, 256],
+                    "text_drop_out_rate": [0.6],
+                    # "text_batch_size": [400, 600, 800],
+                    # "text_learning_rate": 1e-4,
+                    # "text_training_size": 0.8,
+                    # "text_number_epochs": 100,
+                    "video_frame_rate": 1,
+                    "video_input_length": [768],
+                    "video_pic_linear_hidden_length": 1024,
+                    "video_pic_grad_layer_name": "aaa_blocks.31",
+                    # "video_pic_drop_out_rate": [0.5, 0.3, 0.6],
+                    "video_pic_channels": 3,
+                    "video_layer_number": [1, 2, 3],
+                    "video_hidden_length": [512],
+                    "video_linear_hidden_length": [128, 256],
+                    "video_drop_out_rate": [0.6],
+                    "batch_size": [200, 400, 600],
+                    "learning_rate": [1e-4, 1e-5],
+                    "training_size": 0.8,
+                    "number_epochs": 100,
+                    "random": [0, 1],
+                }
+    logger = init_logger(
+        log_level=logging.INFO,
+        name="Separated_LSTM_with_cls&Video_with_vit_embed_mean_like",
+        write_to_file=True,
+        clean_up=False,
+    )
+    adjust_hyperparams(
+        logger,
+        params,
+        sample_number=10,
+        test_params=test_params,
+        model_name="JointNet",
+        run_model=video_scorer,
+        embed_type="local",
+        use_cls=False,
+        test_mode=test_mode,
+        tag_col=tag_name,
+        text_embed_file=os.path.join(config.data_folder, "vector_embed_Separated_LSTM_mean_like_cls.npy")
+    )
 def run_video_attention():
     test_params = {
                 "linear_length": 512,
@@ -405,7 +409,7 @@ def run_video_attention():
                 "grad_layer_name": "aaa_blocks.31",
                 "img_size": 180,
                 "drop_out_rate": 0.5,
-                "batch_size": 400,
+                "batch_size": [80],
                 "learning_rate": 1e-5,
                 "training_size": 0.8,
                 "number_epochs": 100,
@@ -430,5 +434,41 @@ def run_video_attention():
         extract_frames=True
     )
 
+def run_video_attention_with_embed():
+    test_params = {
+                "linear_length": 512,
+                "linear_hidden_length": [128, 256],
+                "frames_per_clip": 16,
+                "grad_layer_name": "aaa_blocks.31",
+                "img_size": 180,
+                "drop_out_rate": 0.5,
+                "batch_size": [200, 400],
+                "learning_rate": 1e-5,
+                "training_size": 0.8,
+                "number_epochs": 100,
+                "random": 1,
+            }
+    logger = init_logger(
+        log_level=logging.INFO,
+        name="STAM_mean_like_embed_full_layers_efficientembed",
+        write_to_file=True,
+        clean_up=False,
+    )
+    adjust_hyperparams(
+        logger,
+        params,
+        sample_number=10,
+        test_params=test_params,
+        model_name="VideoAttentionEmbed",
+        run_model=video_scorer,
+        embed_type="local",
+        test_mode=test_mode,
+        tag_col=tag_name,
+        extract_frames=True
+    )
+
 if __name__ == "__main__":
-    run_video_attention()
+    # run_video_attention()
+    # run_video_attention_with_embed()
+    # run_video_net_with_embed()
+    run_joint_net()

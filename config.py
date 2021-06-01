@@ -21,6 +21,7 @@ video_folder = os.path.join(this_folder, "Data", "videos")
 raw_data_file = os.path.join(data_folder, "data.csv")
 grouped_data_file = os.path.join(data_folder, "grouped.npy")
 embed_data_file = os.path.join(data_folder, "vector_embed")
+embed_data_folder = r"E:\frames_embedding_efficientnet"
 img_embed_folder = os.path.join(data_folder, "img_embeds")
 stam_path = os.path.join(this_folder, "Models", "STAM", "stam_16.pth")
 # frame_data_folder = os.path.join(this_folder, "Data", "frames")

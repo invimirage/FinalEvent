@@ -169,7 +169,7 @@ class DataShower(DataHandler):
         datay = np.array(self.data[coly])
         rm = []
         for i in range(datay.shape[0]):
-            if datax[i] > 200 or datay[i] > 200:
+            if datay[i] < 10 or datay[i] > 200000 or datax[i] > 0.05:
                 rm.append(i)
         self.logger.info(len(rm))
         datay = np.delete(datay, rm)
@@ -187,8 +187,8 @@ class DataShower(DataHandler):
         # 画图
         plt.figure(figsize=(20, 15), dpi=100)
         # plt.title(title, fontsize=24, color="orangered")
-        plt.ylabel(colx, fontsize=18)  # 设置x轴，并设定字号大小
-        plt.xlabel(coly, fontsize=18)  # 设置y轴，并设定字号大小
+        plt.xlabel(colx, fontsize=18)  # 设置x轴，并设定字号大小
+        plt.ylabel(coly, fontsize=18)  # 设置y轴，并设定字号大小
         # 1.真实的点
         plt.scatter(datax[::100], datay[::100], color='blue')
 
@@ -403,9 +403,13 @@ def repeat_videos():
 
 # 两个列之间的回归直线
 def show_relations():
-    col1 = "like"
-    col2 = "negative"
+    col1 = "Bctr"
+    col2 = "Imp"
     graph_drawer = DataShower(config.raw_data_file, logging.INFO)
+    bclk = np.array(graph_drawer.data["bclk"])
+    imp = np.array(graph_drawer.data["clk"])
+    graph_drawer.data[col1] = bclk / (imp + 1e-5)
+    graph_drawer.data[col2] = imp
     graph_drawer.regression(col1, col2)
 
 
@@ -462,29 +466,33 @@ def show_model_result():
     logs = os.listdir(config.log_dir)
     logs = [log for log in logs if "mean_like" in log]
     graph_drawer = DataShower(config.raw_data_file, logging.INFO)
-    logs_needed = []
+    # logs_needed = ["STAM_mean_like_embed_full_layers", "Video_LSTM_with_vit_frames_mean_like", "STAM", "STAM_mean_like_embed", "Video_LSTM_embed_mean_like"]
     # results = ModelResults(log_name, logging.INFO)
+    logs_needed = ["Video_LSTM_with_vit_embed_mean_like"]
 
     # for test_res in results.get_all():
     #     print(test_res["params"])
     #     print(np.max(test_res["test_f1"]))
-    # log_name = "Separated_LSTM_with_upload_time&Video_Embed"
-    # parse_a_log(log_name, graph_drawer)
+    for log in logs_needed:
+        parse_a_log(log, graph_drawer)
     # log_name = "mean_tag_cost_test_Separated_LSTM_without_advid"
     # parse_a_log(log_name, graph_drawer)
-    for log in logs:
-        pat = "log_(.*?).txt"
-        log_name = re.findall(pat, log)[0]
-        if len(logs_needed) == 0 or log_name in logs_needed:
-            print(log_name)
-            parse_a_log(log_name, graph_drawer)
+    # for log in logs:
+    #     pat = "log_(.*?).txt"
+    #     log_name = re.findall(pat, log)[0]
+    #     if len(logs_needed) == 0 or log_name in logs_needed:
+    #         print(log_name)
+    #         parse_a_log(log_name, graph_drawer)
 
 
 def parse_a_log(log_name, graph_drawer):
+    print("*"*20)
+    print(log_name)
     results = ModelResults(log_name, logging.INFO)
     F1, ids, pred, tag = results.get_model_result()
-    graph_drawer.cal_auc(pred, tag, False, ids)
     print(results.get_best_test())
+    graph_drawer.cal_auc(pred, tag, False, ids)
+
 
 if __name__ == "__main__":
     # repeat_videos()
@@ -493,9 +501,10 @@ if __name__ == "__main__":
 
     # tags_f1s()
     # show_tag_relations()
-    # show_relations()
+    show_relations()
     # show_basic_status()
-    show_model_result()
+    # show_model_result()
+
     # show_loss_f1_lines()
     # for model in os.listdir(config.model_save_path):
     #     if model.endswith('.pth'):
